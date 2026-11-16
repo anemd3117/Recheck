@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "release": "managed-20261115",
+  "versions": {
+    "ubuntu": "24.04",
+    "libc6": "2.39-0ubuntu8.9",
+    "libstdc++6": "14.2.0-4ubuntu2~24.04.1",
+    "ollama": "0.40.16",
+    "rea": "6.7.0",
+    "ghidra": "12.1.4",
+    "java": "21.0.9+10",
+    "node": "24.22.1",
+    "worker_contract": "rea-static-1.0"
+  },
+  "images": {
+    "static": {
+      "ref": "recheck-managed-static:1",
+      "image_id": "sha256:98f63c4c428325170e44398f5247a9c6018376182155623928de91d6463e43c7",
+      "platform": "linux/amd64",
+      "trusted_distribution": false,
+      "size_bytes": 2634706460,
+      "worker_contract": "rea-static-1.0",
+      "licenses": {
+        "rea": "MIT",
+        "ghidra": "Apache-2.0 and bundled notices",
+        "java": "GPL-2.0-with-classpath-exception",
+        "node": "MIT"
+      },
+      "archive": {
+        "filename": "recheck-managed-static-1.tar",
+        "sha256": "25f477976160e0ef55b9367ef0c298aa27f25146db4f2b49f3811d4c2e0856c0",
+        "size_bytes": 899629568
+      }
+    },
+    "execution": {
+      "ref": "recheck-managed-execution:1",
+      "image_id": "sha256:69ff214fc3606448b71e0d791f5320e8017751a87b2e5386c1fa47ec1ad94091",
+      "platform": "linux/amd64",
+      "trusted_distribution": false,
+      "size_bytes": 122366226,
+      "base_ref": "ubuntu:24.04@sha256:77eb101c607d6e3d4f5ad0c8a02c2136c689b98aba1f359e6502ba517e5c57ec",
+      "archive": {
+        "filename": "recheck-managed-execution-1.tar",
+        "sha256": "1b42de141231aed8cec50054777150afebbd6b2ae2726a9966adb0c3c0dd91b2",
+        "size_bytes": 30821888
+      }
+    },
+    "ollama": {
+      "ref": "recheck-managed-ollama:1",
+      "image_id": "sha256:dbdd868939e9336a28d1f5e59aea1f50d94a6ed7971cd896b1e5564c5618781f",
+      "platform": "linux/amd64",
+      "trusted_distribution": false,
+      "size_bytes": 268684737,
+      "compute": "cpu",
+      "models_included": false,
+      "license": "MIT; bundled runtime and Ubuntu package licenses retained in image",
+      "upstream_ref": "ollama/ollama:0.40.16@sha256:a372a1c0d1e15b68e9521189785c3ca17795c26c2356f8b1b10122cfb59ed0d7",
+      "archive": {
+        "filename": "recheck-managed-ollama-1.tar",
+        "sha256": "570022483c24feddbae59626e0797b2d05a30b5720b048a6b12563c63db6914a",
+        "size_bytes": 71694336
+      }
+    }
+  }
+}

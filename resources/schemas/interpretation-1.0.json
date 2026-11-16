@@ -1,0 +1,288 @@
+{
+  "$defs": {
+    "Finding": {
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": {
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "claim": {
+          "title": "Claim",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Targets",
+          "type": "array"
+        },
+        "function_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Function Ids",
+          "type": "array"
+        },
+        "test_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Test Ids",
+          "type": "array"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "additional_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Additional Checks",
+          "type": "array"
+        },
+        "recommended_actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Recommended Actions",
+          "type": "array"
+        },
+        "verification_status": {
+          "default": "hypothesis",
+          "enum": [
+            "hypothesis",
+            "supported",
+            "needs_verification"
+          ],
+          "title": "Verification Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "claim",
+        "targets",
+        "function_ids",
+        "test_ids",
+        "evidence_ids",
+        "rationale"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "FunctionCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "original": {
+          "title": "Original",
+          "type": "string"
+        },
+        "reimplementation": {
+          "title": "Reimplementation",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "source": {
+          "default": "LLM opinion",
+          "title": "Source",
+          "type": "string"
+        },
+        "verification_status": {
+          "const": "needs_verification",
+          "default": "needs_verification",
+          "title": "Verification Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "original",
+        "reimplementation",
+        "evidence_ids",
+        "rationale"
+      ],
+      "title": "FunctionCandidate",
+      "type": "object"
+    },
+    "TestCase": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Args",
+          "type": "array"
+        },
+        "stdin": {
+          "default": "",
+          "maxLength": 1048576,
+          "title": "Stdin",
+          "type": "string"
+        },
+        "aux_files": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Aux Files",
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 64,
+          "title": "Env",
+          "type": "object"
+        },
+        "limits": {
+          "$ref": "#/$defs/TestLimits"
+        },
+        "timeout_seconds": {
+          "default": 5,
+          "maximum": 300,
+          "minimum": 0.1,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "source": {
+          "default": "user",
+          "maxLength": 200,
+          "title": "Source",
+          "type": "string"
+        },
+        "verification_status": {
+          "default": "registered",
+          "enum": [
+            "registered",
+            "proposed",
+            "executed"
+          ],
+          "title": "Verification Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "TestCase",
+      "type": "object"
+    },
+    "TestLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "memory_mb": {
+          "anyOf": [
+            {
+              "maximum": 32768,
+              "minimum": 64,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Mb"
+        },
+        "cpus": {
+          "anyOf": [
+            {
+              "maximum": 16,
+              "minimum": 0.1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpus"
+        },
+        "output_bytes": {
+          "anyOf": [
+            {
+              "maximum": 16777216,
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Bytes"
+        }
+      },
+      "title": "TestLimits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "suggested_tests": {
+      "items": {
+        "$ref": "#/$defs/TestCase"
+      },
+      "title": "Suggested Tests",
+      "type": "array"
+    },
+    "function_candidates": {
+      "items": {
+        "$ref": "#/$defs/FunctionCandidate"
+      },
+      "title": "Function Candidates",
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary"
+  ],
+  "title": "Interpretation",
+  "type": "object"
+}

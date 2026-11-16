@@ -1,0 +1,111 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "static_backend": {
+      "default": "auto",
+      "enum": ["auto", "direct", "rea"],
+      "type": "string"
+    },
+    "ollama_url": {
+      "default": "http://127.0.0.1:11434",
+      "title": "Ollama Url",
+      "type": "string"
+    },
+    "model": {
+      "default": "",
+      "title": "Model",
+      "type": "string"
+    },
+    "ghidra_path": {
+      "default": "",
+      "title": "Ghidra Path",
+      "type": "string"
+    },
+    "java_home": {
+      "default": "",
+      "title": "Java Home",
+      "type": "string"
+    },
+    "docker_context": {
+      "default": "",
+      "title": "Docker Context",
+      "type": "string"
+    },
+    "linux_image": {
+      "default": "recheck-analysis-linux:1",
+      "title": "Linux Image",
+      "type": "string"
+    },
+    "windows_image": {
+      "default": "recheck-analysis-windows:1",
+      "title": "Windows Image",
+      "type": "string"
+    },
+    "num_ctx": {
+      "default": 8192,
+      "maximum": 131072,
+      "minimum": 1024,
+      "title": "Num Ctx",
+      "type": "integer"
+    },
+    "num_predict": {
+      "default": 2048,
+      "maximum": 16384,
+      "minimum": 64,
+      "title": "Num Predict",
+      "type": "integer"
+    },
+    "llm_timeout": {
+      "default": 120,
+      "maximum": 900,
+      "minimum": 5,
+      "title": "Llm Timeout",
+      "type": "integer"
+    },
+    "memory_mb": {
+      "default": 512,
+      "maximum": 32768,
+      "minimum": 64,
+      "title": "Memory Mb",
+      "type": "integer"
+    },
+    "cpu": {
+      "default": 1,
+      "maximum": 16,
+      "minimum": 0.1,
+      "title": "Cpu",
+      "type": "number"
+    },
+    "output_limit": {
+      "default": 1048576,
+      "maximum": 16777216,
+      "minimum": 1024,
+      "title": "Output Limit",
+      "type": "integer"
+    },
+    "static_timeout": {
+      "default": 300,
+      "maximum": 3600,
+      "minimum": 10,
+      "title": "Static Timeout",
+      "type": "integer"
+    },
+    "normalize_newlines": {
+      "default": false,
+      "title": "Normalize Newlines",
+      "type": "boolean"
+    },
+    "trim_trailing_whitespace": {
+      "default": false,
+      "title": "Trim Trailing Whitespace",
+      "type": "boolean"
+    },
+    "capabilities": {
+      "additionalProperties": true,
+      "title": "Capabilities",
+      "type": "object"
+    }
+  },
+  "title": "Settings",
+  "type": "object"
+}

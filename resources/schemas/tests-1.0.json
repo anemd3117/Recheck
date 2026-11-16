@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "TestLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "memory_mb": {
+          "anyOf": [
+            {
+              "maximum": 32768,
+              "minimum": 64,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Mb"
+        },
+        "cpus": {
+          "anyOf": [
+            {
+              "maximum": 16,
+              "minimum": 0.1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpus"
+        },
+        "output_bytes": {
+          "anyOf": [
+            {
+              "maximum": 16777216,
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Bytes"
+        }
+      },
+      "title": "TestLimits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Description",
+      "type": "string"
+    },
+    "args": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 128,
+      "title": "Args",
+      "type": "array"
+    },
+    "stdin": {
+      "default": "",
+      "maxLength": 1048576,
+      "title": "Stdin",
+      "type": "string"
+    },
+    "aux_files": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Aux Files",
+      "type": "array"
+    },
+    "env": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 64,
+      "title": "Env",
+      "type": "object"
+    },
+    "limits": {
+      "$ref": "#/$defs/TestLimits"
+    },
+    "timeout_seconds": {
+      "default": 5,
+      "maximum": 300,
+      "minimum": 0.1,
+      "title": "Timeout Seconds",
+      "type": "number"
+    },
+    "source": {
+      "default": "user",
+      "maxLength": 200,
+      "title": "Source",
+      "type": "string"
+    },
+    "verification_status": {
+      "default": "registered",
+      "enum": [
+        "registered",
+        "proposed",
+        "executed"
+      ],
+      "title": "Verification Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "TestCase",
+  "type": "object"
+}

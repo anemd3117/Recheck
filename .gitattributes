@@ -1,0 +1,4 @@
+# Packaging verifies exact source bytes. Do not convert line endings on checkout.
+* -text
+# CRLF is intentional in some verified Windows source/data files.
+* whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

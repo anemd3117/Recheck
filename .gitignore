@@ -1,0 +1,40 @@
+.venv/
+__pycache__/
+.pytest_cache/
+build/
+*.egg-info/
+
+# Local builds, personal analysis, account checks and backups.
+/dist/
+/verification/
+/environment/
+/.codex/
+.env
+.env.*
+!.env.example
+*.py[cod]
+*.log
+*.sqlite
+*.sqlite3
+*.db
+/settings.json
+/auth.json
+/credentials/
+
+# Share reviewed guides; machine-specific diagnostics and historical QA stay local.
+/docs/*
+!/docs/AI_CONNECTIONS.md
+!/docs/AI_AUTH_STATUS.md
+!/docs/UX_UPGRADE_20261115.md
+!/docs/GITHUB_WORKFLOW.md
+!/docs/PROJECT_STATUS.md
+!/docs/PUBLICATION_SCOPE.md
+!/docs/PUBLIC_HISTORY.md
+!/docs/CONTAINER_RUNTIME.md
+!/docs/WINDOWS_DOCKER.md
+!/docs/검증범위.txt
+!/docs/DISTRIBUTION_AND_RECOVERY.md
+
+# Existing presentation artifacts are kept locally.
+/Recheck_Light*.pptx
+/Recheck_Project_Introduction_2026.pdf

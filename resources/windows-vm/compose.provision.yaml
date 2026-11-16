@@ -1,0 +1,39 @@
+# Provisioning scaffold only; this is not Recheck's target execution backend.
+# See docs/WINDOWS_DOCKER.md. No mutable image/default media or automatic restart.
+services:
+  windows-lab:
+    profiles: [provision]
+    # linux/amd64 manifest inspected on 2026-11-16; not pulled or guest-tested.
+    image: docker.io/dockurr/windows@sha256:59f8bed19cfd49cf1701debe34f9df6311e61a4e2ae68aa9f41206e2184e31cc
+    platform: linux/amd64
+    pull_policy: never
+    environment:
+      # Guest Docker Desktop requires at least 8 GB; nested operation is unverified.
+      RAM_SIZE: "8G"
+      CPU_CORES: "4"
+      DISK_SIZE: "64G"
+      USERNAME: RecheckLab
+      PASSWORD: ${RECHECK_WINDOWS_VM_PASSWORD:?Set a dedicated disposable lab password}
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "127.0.0.1:8006:8006"
+    volumes:
+      - type: bind
+        source: ${RECHECK_WINDOWS_VM_STORAGE:?Set an existing dedicated empty lab storage directory}
+        target: /storage
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${RECHECK_WINDOWS_VM_ISO:?Set a local officially obtained Windows x64 ISO}
+        target: /custom.iso
+        read_only: true
+        bind:
+          create_host_path: false
+    restart: "no"
+    stop_grace_period: 2m
+    labels:
+      org.recheck.purpose: windows-installation-lab

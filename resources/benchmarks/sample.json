@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "created_at": "2026-11-13T04:01:37.517368+00:00",
+  "provenance": "Recheck-owned fixed C benchmark probe",
+  "source": "sample.c",
+  "source_sha256": "e83c157c2ddb5f6a320821f2032383c0cbc07e62bc22567780289206ed96267a",
+  "sha256": "8362f49ae39d64b791386a9d3c9d12eac56427cd9fad63ff2d0df50ed430b57b",
+  "bytes": 17608,
+  "image_id": "sha256:eb3b568c6ad0b1ff3d5c85d1e8df03e6a4c5f2cad0834fc4224d73cb15205a46",
+  "flags": [
+    "-O0",
+    "-g",
+    "-fno-inline",
+    "-no-pie"
+  ],
+  "compiler": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "build_log": "C:\\Users\\LKM\\Desktop\\LKM\\VibeCoding\\캡스톤\\Recheck\\verification\\hardware-20261113-125651\\probe-build-retry1\\build-log.json",
+  "host_execution": false
+}

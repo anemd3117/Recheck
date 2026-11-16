@@ -1,0 +1,142 @@
+{
+  "$defs": {
+    "CFGNode": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "title": "End",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "size"
+      ],
+      "title": "CFGNode",
+      "type": "object"
+    },
+    "StaticFunction": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "address": {
+          "minLength": 1,
+          "title": "Address",
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/CFGNode"
+          },
+          "maxItems": 10000,
+          "title": "Blocks",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 80000,
+          "title": "Edges",
+          "type": "array"
+        },
+        "calls": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Calls",
+          "type": "array"
+        },
+        "mnemonics": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100000,
+          "title": "Mnemonics",
+          "type": "array"
+        },
+        "decompile": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompile"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "address",
+        "blocks",
+        "edges",
+        "calls",
+        "mnemonics"
+      ],
+      "title": "StaticFunction",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "pattern": "^1\\.0$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[a-fA-F0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "functions": {
+      "items": {
+        "$ref": "#/$defs/StaticFunction"
+      },
+      "maxItems": 10000,
+      "title": "Functions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "sha256",
+    "functions"
+  ],
+  "title": "StaticArtifact",
+  "type": "object"
+}

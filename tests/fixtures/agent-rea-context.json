@@ -1,0 +1,1130 @@
+{
+  "context": {
+    "run_id": "run_11111111111111111111111111111111",
+    "question": "",
+    "producer": "Recheck observed facts",
+    "metrics": {
+      "matched": 2,
+      "denominator": 3,
+      "match_rate": 0.6666666666666666
+    },
+    "observations": [
+      {
+        "test_id": "arg-101",
+        "input": {
+          "args": [
+            "101"
+          ],
+          "stdin": ""
+        },
+        "match": false,
+        "evidence_ids": [
+          "ev_00000000000000000000000000000038",
+          "ev_00000000000000000000000000000039"
+        ],
+        "original": {
+          "stdout": "recheck_probe=7450\n",
+          "stderr": "",
+          "exit_code": 0,
+          "status": "success"
+        },
+        "reimplementation": {
+          "stdout": "recheck_probe=7550\n",
+          "stderr": "",
+          "exit_code": 0,
+          "status": "success"
+        }
+      },
+      {
+        "test_id": "arg-8",
+        "input": {
+          "args": [
+            "8"
+          ],
+          "stdin": ""
+        },
+        "match": true,
+        "evidence_ids": [
+          "ev_00000000000000000000000000000032",
+          "ev_00000000000000000000000000000033"
+        ],
+        "original": {
+          "stdout": "recheck_probe=44\n",
+          "stderr": "",
+          "exit_code": 0,
+          "status": "success"
+        },
+        "reimplementation": {
+          "same_observation_as": "original"
+        }
+      },
+      {
+        "test_id": "arg-100",
+        "input": {
+          "args": [
+            "100"
+          ],
+          "stdin": ""
+        },
+        "match": true,
+        "evidence_ids": [
+          "ev_00000000000000000000000000000035",
+          "ev_00000000000000000000000000000036"
+        ],
+        "original": {
+          "stdout": "recheck_probe=7450\n",
+          "stderr": "",
+          "exit_code": 0,
+          "status": "success"
+        },
+        "reimplementation": {
+          "same_observation_as": "original"
+        }
+      }
+    ],
+    "evidence_data": [
+      {
+        "evidence_id": "ev_0000000000000000000000000000002f",
+        "kind": "structure",
+        "target": "both",
+        "source": "",
+        "data_excerpt": "{\"decompile_differences\":[{\"original\":\"0x401156\",\"reimplementation\":\"0x401156\",\"evidence_ids\":[\"ev_00000000000000000000000000000012\",\"ev_00000000000000000000000000000028\"],\"diff\":\"--- original/bounded_sum\\n+++ reimplementation/bounded_sum\\n@@ -8,7 +8,7 @@\\n   int i;\\n   \\n   total = 0;\\n-  for (i = 0; (i < count && (i < 100)); i = i + 1) {\\n+  for (i = 0; (i < count && (i < 0x65)); i = i + 1) {\\n     iVar1 = i;\\n     if ((i & 1U) != 0) {\\n       iVar1 = i * 2;\",\"truncated\":false}],\"score\":0.8738095238095239,\"match_count\":21}",
+        "total_characters": 530,
+        "returned_characters": 530,
+        "returned_range": [
+          0,
+          530
+        ],
+        "projection_omitted_fields": [
+          "matches details; query by ID",
+          "unmatched function details and repeated names/provenance; query by ID"
+        ],
+        "truncated": true,
+        "function_records": [
+          {
+            "target": "original",
+            "id": "0x401156",
+            "name": "bounded_sum",
+            "evidence_id": "ev_00000000000000000000000000000012"
+          },
+          {
+            "target": "reimplementation",
+            "id": "0x401156",
+            "name": "bounded_sum",
+            "evidence_id": "ev_00000000000000000000000000000028"
+          }
+        ],
+        "data": {
+          "decompile_differences": [
+            {
+              "original": "0x401156",
+              "reimplementation": "0x401156",
+              "evidence_ids": [
+                "ev_00000000000000000000000000000012",
+                "ev_00000000000000000000000000000028"
+              ],
+              "diff": "--- original/bounded_sum\n+++ reimplementation/bounded_sum\n@@ -8,7 +8,7 @@\n   int i;\n   \n   total = 0;\n-  for (i = 0; (i < count && (i < 100)); i = i + 1) {\n+  for (i = 0; (i < count && (i < 0x65)); i = i + 1) {\n     iVar1 = i;\n     if ((i & 1U) != 0) {\n       iVar1 = i * 2;",
+              "truncated": false
+            }
+          ],
+          "score": 0.8738095238095239,
+          "match_count": 21
+        }
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000012",
+        "kind": "function",
+        "target": "original",
+        "source": "0x401156",
+        "data_excerpt": "{\"id\":\"0x401156\",\"name\":\"bounded_sum\",\"decompile\":\"\\nint bounded_sum(int count)\\n\\n{\\n  int iVar1;\\n  int count_local;\\n  int total;\\n  int i;\\n  \\n  total = 0;\\n  for (i = 0; (i < count && (i < 100)); i = i + 1) {\\n    iVar1 = i;\\n    if ((i & 1U) != 0) {\\n      iVar1 = i * 2;\\n    }\\n    total = total + iVar1;\\n  }\\n  return total;\\n}\\n\\n\",\"provenance\":\"REA MCP를 통해 추출한 Ghidra 추정 결과; 원본 소스 아님. coverage와 limitations에 기록된 누락·분석 범위를 함께 확인하세요.\"}",
+        "total_characters": 446,
+        "returned_characters": 446,
+        "returned_range": [
+          0,
+          446
+        ],
+        "projection_omitted_fields": [
+          "CFG/instruction details; query by ID"
+        ],
+        "truncated": true
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000028",
+        "kind": "function",
+        "target": "reimplementation",
+        "source": "0x401156",
+        "data_excerpt": "{\"id\":\"0x401156\",\"name\":\"bounded_sum\",\"decompile\":\"\\nint bounded_sum(int count)\\n\\n{\\n  int iVar1;\\n  int count_local;\\n  int total;\\n  int i;\\n  \\n  total = 0;\\n  for (i = 0; (i < count && (i < 0x65)); i = i + 1) {\\n    iVar1 = i;\\n    if ((i & 1U) != 0) {\\n      iVar1 = i * 2;\\n    }\\n    total = total + iVar1;\\n  }\\n  return total;\\n}\\n\\n\",\"provenance\":\"REA MCP를 통해 추출한 Ghidra 추정 결과; 원본 소스 아님. coverage와 limitations에 기록된 누락·분석 범위를 함께 확인하세요.\"}",
+        "total_characters": 447,
+        "returned_characters": 447,
+        "returned_range": [
+          0,
+          447
+        ],
+        "projection_omitted_fields": [
+          "CFG/instruction details; query by ID"
+        ],
+        "truncated": true
+      },
+      {
+        "evidence_id": "ev_0000000000000000000000000000003a",
+        "kind": "behavior",
+        "target": "both",
+        "source": "",
+        "data_excerpt": "{\"matched\":2,\"denominator\":3,\"match_rate\":0.6666666666666666,\"scope\":\"등록하여 실행한 입력 범위에서만 확인한 결과\"}",
+        "total_characters": 96,
+        "returned_characters": 96,
+        "returned_range": [
+          0,
+          96
+        ],
+        "projection_omitted_fields": [],
+        "truncated": false
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000037",
+        "kind": "test_input",
+        "target": "both",
+        "source": "registered test arg-101",
+        "data_excerpt": "{\"id\":\"arg-101\",\"description\":\"\",\"args\":[\"101\"],\"stdin\":\"\",\"aux_files\":[],\"env\":{},\"limits\":{\"memory_mb\":null,\"cpus\":null,\"output_bytes\":null},\"timeout_seconds\":10.0,\"source\":\"user\",\"verification_status\":\"executed\"}",
+        "total_characters": 215,
+        "returned_characters": 215,
+        "returned_range": [
+          0,
+          215
+        ],
+        "projection_omitted_fields": [],
+        "truncated": false
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000000",
+        "kind": "file_metadata",
+        "target": "original",
+        "source": "/fixture/local-source",
+        "data_excerpt": "{\"path\":\"/fixture/local-source\",\"name\":\"sample.elf\",\"sha256\":\"8362f49ae39d64b791386a9d3c9d12eac56427cd9fad63ff2d0df50ed430b57b\",\"size\":17608,\"format\":\"ELF\",\"os\":\"linux\",\"architecture\":\"x86-64\",\"supported\":true,\"reason\":\"콘솔 여부와 동적 로더는 격리 실행에서 확인\",\"snapshot\":\"/fixture/local-source\"}",
+        "total_characters": 531,
+        "returned_characters": 531,
+        "returned_range": [
+          0,
+          531
+        ],
+        "projection_omitted_fields": [],
+        "truncated": false
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000001",
+        "kind": "file_metadata",
+        "target": "reimplementation",
+        "source": "/fixture/local-source",
+        "data_excerpt": "{\"path\":\"/fixture/local-source\",\"name\":\"sample-changed.elf\",\"sha256\":\"7f86556c6cef0a14520085fce8e9c182d2c8175de84474e3a02d523863231fbe\",\"size\":17616,\"format\":\"ELF\",\"os\":\"linux\",\"architecture\":\"x86-64\",\"supported\":true,\"reason\":\"콘솔 여부와 동적 로더는 격리 실행에서 확인\",\"snapshot\":\"/fixture/local-source\"}",
+        "total_characters": 619,
+        "returned_characters": 619,
+        "returned_range": [
+          0,
+          619
+        ],
+        "projection_omitted_fields": [],
+        "truncated": false
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000002",
+        "kind": "environment",
+        "target": "both",
+        "source": "environment probe",
+        "data_excerpt": "{\"ai\":{\"connected\":true,\"authenticated\":true,\"inference_verified\":false,\"model_count\":8,\"provider\":\"openai\",\"auth_mode\":\"chatgpt\",\"model\":\"gpt-6.1-sol\",\"endpoint\":\"https://api.openai.com/v1\",\"profile_id\":\"00000000-0000-0000-0000-000000000000\"},\"ollama\":{\"connected\":false,\"status\":\"not_selected\",\"provider\":\"ollama\"},\"docker\":{\"cli\":\"/fixture/local-source\",\"desktop\":\"/fixture/local-source\",\"ready\":true,\"status\":\"ready\",\"context\":\"desktop-linux\",\"install_url\":\"https://docs.docker.com/desktop/setup/install/windows-install/\",\"process\":{\"argv\":[\"/fixture/local-source\",\"version\",\"--format\",\"{{json .}}\"],\"returncode\":0,\"cancelled\":false,\"timed_out\":false,\"truncated\":false,\"error\":null,\"cleanup_errors\":[],\"duration\":0.2586,\"stdout\":\"{\\\"Client\\\":{\\\"Version\\\":\\\"29.9.2\\\",\\\"ApiVersion\\\":\\\"1.56\\\",\\\"DefaultAPIVersion\\\":\\\"1.56\\\",\\\"GitCommit\\\":\\\"a82e528\\\",\\\"GoVersion\\\":\\\"go1.26.10\\\",\\\"Os\\\":\\\"windows\\\",\\\"Arch\\\":\\\"amd64\\\",\\\"BuildTime\\\":\\\"Tue Oct 20 19:44:07 2026\\\",\\\"Context\\\":\\\"desktop-linux\\\"},\\\"Server\\\":{\\\"Platform\\\":{\\\"Name\\\":\\\"Docker Desktop 4.98.0 (245422)\\\"},\\\"Version\\\":\\\"29.9.2\\\",\\\"ApiVersion\\\":\\\"1.56\\\",\\\"MinAPIVersion\\\":\\\"1.40\\\",\\\"Os\\\":\\\"linux\\\",\\\"Arch\\\":\\\"amd64\\\",\\\"Components\\\":[{\\\"Name\\\":\\\"Engine\\\",\\\"Version\\\":\\\"29.9.2\\\",\\\"Details\\\":{\\\"ApiVersion\\\":\\\"1.56\\\",\\\"Arch\\\":\\\"amd64\\\",\\\"BuildTime\\\":\\\"Tue Oct 20 18:45:02 2026\\\",\\\"Experimental\\\":\\\"false\\\",\\\"GitCommit\\\":\\\"0367cbe\\\",\\\"GoVersion\\\":\\\"go1.26.10\\\",\\\"KernelVersion\\\":\\\"6.18.58.1-microsoft-standard-WSL2\\\",\\\"MinAPIVersion\\\":\\\"1.40\\\",\\\"Module\\\":\\\"github.com/moby/moby/v2\\\",\\\"ModuleVersion\\\":\\\"v2.0.0+unknown\\\",\\\"Os\\\":\\\"linux\\\"}},{\\\"Name\\\":\\\"containerd\\\",\\\"Versi",
+        "total_characters": 28952,
+        "returned_characters": 1800,
+        "returned_range": [
+          0,
+          1800
+        ],
+        "projection_omitted_fields": [],
+        "truncated": true
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000003",
+        "kind": "static_extraction",
+        "target": "original",
+        "source": "/fixture/local-source",
+        "data_excerpt": "{\"schema_version\":\"1.0\",\"status\":\"partial\",\"complete\":false,\"backend\":\"rea\",\"tool\":\"REA MCP / Ghidra\",\"cache\":{\"hit\":false,\"key\":\"1d1b7ef0a4ecc42f3dfae597b302a873350c926382b49801a85d789d26fa2982\",\"rejected\":null},\"environment\":{\"ready\":true,\"status\":\"ready\",\"backend\":\"rea\",\"tool\":\"REA MCP / Ghidra\",\"engine\":{\"cli\":\"/fixture/local-source\",\"desktop\":\"/fixture/local-source\",\"ready\":true,\"status\":\"ready\",\"context\":\"desktop-linux\",\"install_url\":\"https://docs.docker.com/desktop/setup/install/windows-install/\",\"process\":{\"argv\":[\"/fixture/local-source\",\"version\",\"--format\",\"{{json .}}\"],\"returncode\":0,\"cancelled\":false,\"timed_out\":false,\"truncated\":false,\"error\":null,\"cleanup_errors\":[],\"duration\":0.2022,\"stdout\":\"{\\\"Cl",
+        "total_characters": 40571,
+        "returned_characters": 900,
+        "returned_range": [
+          0,
+          900
+        ],
+        "projection_omitted_fields": [
+          "Final wire budget shortened values; function identities retained."
+        ],
+        "truncated": true
+      },
+      {
+        "evidence_id": "ev_00000000000000000000000000000030",
+        "kind": "image",
+        "target": "both",
+        "source": "",
+        "data_excerpt": "{\"status\":\"success\",\"managed\":true,\"image\":\"sha256:69ff214fc3606448b71e0d791f5320e8017751a87b2e5386c1fa47ec1ad94091\",\"image_id\":\"sha256:69ff214fc3606448b71e0d791f5320e8017751a87b2e5386c1fa47ec1ad94091\",\"image_ref\":\"recheck-managed-execution:1\",\"details\":{\"Id\":\"sha256:69ff214f",
+        "total_characters": 15150,
+        "returned_characters": 276,
+        "returned_range": [
+          0,
+          276
+        ],
+        "projection_omitted_fields": [],
+        "truncated": true
+      }
+    ],
+    "omitted_evidence_ids": [
+      "ev_00000000000000000000000000000019",
+      "ev_00000000000000000000000000000031",
+      "ev_00000000000000000000000000000034",
+      "ev_00000000000000000000000000000004",
+      "ev_00000000000000000000000000000005",
+      "ev_00000000000000000000000000000006",
+      "ev_00000000000000000000000000000007",
+      "ev_00000000000000000000000000000008",
+      "ev_00000000000000000000000000000009",
+      "ev_0000000000000000000000000000000a",
+      "ev_0000000000000000000000000000000b",
+      "ev_0000000000000000000000000000000c",
+      "ev_0000000000000000000000000000000d",
+      "ev_0000000000000000000000000000000e",
+      "ev_0000000000000000000000000000000f",
+      "ev_00000000000000000000000000000010",
+      "ev_00000000000000000000000000000011",
+      "ev_00000000000000000000000000000013",
+      "ev_00000000000000000000000000000014",
+      "ev_00000000000000000000000000000015",
+      "ev_00000000000000000000000000000016",
+      "ev_00000000000000000000000000000017",
+      "ev_00000000000000000000000000000018",
+      "ev_0000000000000000000000000000001a",
+      "ev_0000000000000000000000000000001b",
+      "ev_0000000000000000000000000000001c",
+      "ev_0000000000000000000000000000001d",
+      "ev_0000000000000000000000000000001e",
+      "ev_0000000000000000000000000000001f",
+      "ev_00000000000000000000000000000020",
+      "ev_00000000000000000000000000000021",
+      "ev_00000000000000000000000000000022",
+      "ev_00000000000000000000000000000023",
+      "ev_00000000000000000000000000000024",
+      "ev_00000000000000000000000000000025",
+      "ev_00000000000000000000000000000026",
+      "ev_00000000000000000000000000000027",
+      "ev_00000000000000000000000000000029",
+      "ev_0000000000000000000000000000002a",
+      "ev_0000000000000000000000000000002b",
+      "ev_0000000000000000000000000000002c",
+      "ev_0000000000000000000000000000002d",
+      "ev_0000000000000000000000000000002e"
+    ],
+    "omitted_test_ids": [],
+    "budget_characters": 12000,
+    "token_budget_heuristic": {
+      "num_ctx": 32768,
+      "reserved_output": 4096,
+      "reserved_schema_instructions": 1800,
+      "characters_per_remaining_token": 0.9
+    },
+    "scope": "Only actually executed registered inputs. Distinguish observed facts and hypotheses.",
+    "omitted_evidence_count": 43,
+    "selection_policy": "불일치 입력/양쪽 관찰 우선; 생략된 입력과 근거 ID 기록; 구조는 변경 디컴파일 우선; 원문은 ID 조회",
+    "wire_characters": 11794
+  },
+  "history": [
+    {
+      "step": 1,
+      "kind": "proposal",
+      "content": "등록된 실행 상태와 실제 근거를 확인한 뒤, 경계값 불일치의 원인을 분석하고 보고서 산출물을 검증하겠습니다.\n",
+      "tool_calls": [
+        {
+          "id": "call-0-0",
+          "type": "function",
+          "function": {
+            "name": "get_status",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "kind": "tool_result",
+      "name": "get_status",
+      "tool_call_id": "call-0-0",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111"
+      },
+      "result": {
+        "ok": true,
+        "result": {
+          "stages": {
+            "metadata": {
+              "status": "success",
+              "started_at": "2026-11-15T12:29:53.324664+00:00",
+              "completed_at": "2026-11-15T12:29:53.371487+00:00",
+              "duration_seconds": 0.046823
+            },
+            "environment": {
+              "status": "success",
+              "started_at": "2026-11-15T12:29:53.382673+00:00",
+              "completed_at": "2026-11-15T12:29:59.254783+00:00",
+              "duration_seconds": 5.87211
+            },
+            "static_original": {
+              "status": "partial",
+              "started_at": "2026-11-15T12:29:59.269077+00:00",
+              "completed_at": "2026-11-15T12:30:25.094207+00:00",
+              "duration_seconds": 25.82513
+            },
+            "static_reimplementation": {
+              "status": "partial",
+              "started_at": "2026-11-15T12:30:25.132274+00:00",
+              "completed_at": "2026-11-15T12:30:54.138765+00:00",
+              "duration_seconds": 29.006491
+            },
+            "structure": {
+              "status": "success",
+              "started_at": "2026-11-15T12:30:54.189356+00:00",
+              "completed_at": "2026-11-15T12:30:54.243020+00:00",
+              "duration_seconds": 0.053664
+            },
+            "image": {
+              "status": "success",
+              "started_at": "2026-11-15T12:30:54.284239+00:00",
+              "completed_at": "2026-11-15T12:30:56.279570+00:00",
+              "duration_seconds": 1.995331
+            },
+            "dynamic": {
+              "status": "success",
+              "started_at": "2026-11-15T12:30:56.314570+00:00",
+              "completed_at": "2026-11-15T12:31:18.014011+00:00",
+              "duration_seconds": 21.699441
+            },
+            "llm": {
+              "status": "success",
+              "started_at": "2026-11-15T12:31:18.064821+00:00",
+              "completed_at": "2026-11-15T12:31:33.992821+00:00",
+              "duration_seconds": 15.928
+            },
+            "agent": {
+              "status": "partial",
+              "started_at": "2026-11-15T12:31:34.039955+00:00",
+              "completed_at": "2026-11-15T12:31:52.703012+00:00",
+              "duration_seconds": 18.663057
+            },
+            "report": {
+              "status": "success",
+              "started_at": "2026-11-15T12:31:52.767171+00:00",
+              "completed_at": "2026-11-15T12:31:52.872011+00:00",
+              "duration_seconds": 0.10484
+            }
+          },
+          "status": "running"
+        }
+      }
+    },
+    {
+      "step": 2,
+      "kind": "proposal",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call-2-0",
+          "type": "function",
+          "function": {
+            "name": "get_function",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111",
+              "target": "original",
+              "function_id": "0x401156"
+            }
+          }
+        },
+        {
+          "id": "call-2-1",
+          "type": "function",
+          "function": {
+            "name": "get_function",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111",
+              "target": "reimplementation",
+              "function_id": "0x401156"
+            }
+          }
+        },
+        {
+          "id": "call-2-2",
+          "type": "function",
+          "function": {
+            "name": "get_mismatches",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "kind": "tool_result",
+      "name": "get_function",
+      "tool_call_id": "call-2-0",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111",
+        "target": "original",
+        "function_id": "0x401156"
+      },
+      "result": {
+        "ok": true,
+        "result": {
+          "id": "0x401156",
+          "name": "bounded_sum",
+          "address": "0x401156",
+          "external": false,
+          "thunk": false,
+          "thunk_target": null,
+          "size": 73,
+          "instruction_count": 25,
+          "blocks": [
+            {
+              "id": "0x401156",
+              "start": "0x401156",
+              "end": "0x401171",
+              "size": 27
+            },
+            {
+              "id": "0x401171",
+              "start": "0x401171",
+              "end": "0x40117b",
+              "size": 10
+            },
+            {
+              "id": "0x40117b",
+              "start": "0x40117b",
+              "end": "0x401182",
+              "size": 7
+            },
+            {
+              "id": "0x401182",
+              "start": "0x401182",
+              "end": "0x401185",
+              "size": 3
+            },
+            {
+              "id": "0x401185",
+              "start": "0x401185",
+              "end": "0x40118c",
+              "size": 7
+            },
+            {
+              "id": "0x40118c",
+              "start": "0x40118c",
+              "end": "0x401194",
+              "size": 8
+            },
+            {
+              "id": "0x401194",
+              "start": "0x401194",
+              "end": "0x40119a",
+              "size": 6
+            },
+            {
+              "id": "0x40119a",
+              "start": "0x40119a",
+              "end": "0x40119f",
+              "size": 5
+            }
+          ],
+          "edges": [
+            [
+              "0x401156",
+              "0x40118c"
+            ],
+            [
+              "0x401171",
+              "0x40117b"
+            ],
+            [
+              "0x401171",
+              "0x401182"
+            ],
+            [
+              "0x40117b",
+              "0x401185"
+            ],
+            [
+              "0x401182",
+              "0x401185"
+            ],
+            [
+              "0x401185",
+              "0x40118c"
+            ],
+            [
+              "0x40118c",
+              "0x401194"
+            ],
+            [
+              "0x40118c",
+              "0x40119a"
+            ],
+            [
+              "0x401194",
+              "0x401171"
+            ],
+            [
+              "0x401194",
+              "0x40119a"
+            ]
+          ],
+          "calls": [],
+          "mnemonics": [
+            "endbr64",
+            "push",
+            "mov",
+            "mov",
+            "mov",
+            "mov",
+            "jmp",
+            "mov",
+            "and",
+            "test",
+            "jz",
+            "mov",
+            "add",
+            "jmp",
+            "mov",
+            "add",
+            "add",
+            "mov",
+            "cmp",
+            "jge",
+            "cmp",
+            "jle",
+            "mov",
+            "pop",
+            "ret"
+          ],
+          "decompile": "\nint bounded_sum(int count)\n\n{\n  int iVar1;\n  int count_local;\n  int total;\n  int i;\n  \n  total = 0;\n  for (i = 0; (i < count && (i < 100)); i = i + 1) {\n    iVar1 = i;\n    if ((i & 1U) != 0) {\n      iVar1 = i * 2;\n    }\n    total = total + iVar1;\n  }\n  return total;\n}\n\n",
+          "decompile_status": "success",
+          "coverage": {
+            "cfg": "complete",
+            "assembly": "complete",
+            "calls": "complete_resolved_only"
+          },
+          "partial": false,
+          "partial_reasons": [],
+          "limitations": [
+            "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+            "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+            "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+            "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+            "References cover the complete Ghidra function-body AddressSet and exact entry. Dossier incoming edges omit sources owned by that function; procedure_references also retains those internal edges.",
+            "The dossier combines Ghidra FunctionManager, Listing, ReferenceManager, BasicBlockModel, and decompiler observations; provider-specific pseudocode and assembly are not cross-provider text invariants.",
+            "Resolved reference metadata identifies computed, indirect, external, call, jump, and data edges; unresolved targetless flows remain unknown, and function classifications distinguish thunks and externals.",
+            "Synthetic Ghidra entry-point references without actionable memory sources are omitted.",
+            "The Java bridge serializes one function request per Program and lets each decompilation run until it completes or the caller cancels.",
+            "Unresolved computed or indirect flows without target addresses are not represented as reference edges.",
+            "Thunk and external classifications are Ghidra FunctionManager observations; they do not resolve targetless calls.",
+            "Pseudocode and assembly are Ghidra-specific representations, not original source or Hopper-equivalent text.",
+            "Only resolved Ghidra call references are returned; unresolved computed or indirect calls remain unknown, while function classifications distinguish thunks and externals."
+          ],
+          "truncated": false,
+          "evidence_id": "ev_00000000000000000000000000000012",
+          "relationship_coverage": {
+            "status": "complete",
+            "diagnostics": [
+              "Only resolved Ghidra call references are returned; unresolved computed or indirect calls remain unknown, while function classifications distinguish thunks and externals."
+            ]
+          }
+        }
+      }
+    },
+    {
+      "step": 2,
+      "kind": "tool_result",
+      "name": "get_function",
+      "tool_call_id": "call-2-1",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111",
+        "target": "reimplementation",
+        "function_id": "0x401156"
+      },
+      "result": {
+        "ok": true,
+        "result": {
+          "id": "0x401156",
+          "name": "bounded_sum",
+          "address": "0x401156",
+          "external": false,
+          "thunk": false,
+          "thunk_target": null,
+          "size": 73,
+          "instruction_count": 25,
+          "blocks": [
+            {
+              "id": "0x401156",
+              "start": "0x401156",
+              "end": "0x401171",
+              "size": 27
+            },
+            {
+              "id": "0x401171",
+              "start": "0x401171",
+              "end": "0x40117b",
+              "size": 10
+            },
+            {
+              "id": "0x40117b",
+              "start": "0x40117b",
+              "end": "0x401182",
+              "size": 7
+            },
+            {
+              "id": "0x401182",
+              "start": "0x401182",
+              "end": "0x401185",
+              "size": 3
+            },
+            {
+              "id": "0x401185",
+              "start": "0x401185",
+              "end": "0x40118c",
+              "size": 7
+            },
+            {
+              "id": "0x40118c",
+              "start": "0x40118c",
+              "end": "0x401194",
+              "size": 8
+            },
+            {
+              "id": "0x401194",
+              "start": "0x401194",
+              "end": "0x40119a",
+              "size": 6
+            },
+            {
+              "id": "0x40119a",
+              "start": "0x40119a",
+              "end": "0x40119f",
+              "size": 5
+            }
+          ],
+          "edges": [
+            [
+              "0x401156",
+              "0x40118c"
+            ],
+            [
+              "0x401171",
+              "0x40117b"
+            ],
+            [
+              "0x401171",
+              "0x401182"
+            ],
+            [
+              "0x40117b",
+              "0x401185"
+            ],
+            [
+              "0x401182",
+              "0x401185"
+            ],
+            [
+              "0x401185",
+              "0x40118c"
+            ],
+            [
+              "0x40118c",
+              "0x401194"
+            ],
+            [
+              "0x40118c",
+              "0x40119a"
+            ],
+            [
+              "0x401194",
+              "0x401171"
+            ],
+            [
+              "0x401194",
+              "0x40119a"
+            ]
+          ],
+          "calls": [],
+          "mnemonics": [
+            "endbr64",
+            "push",
+            "mov",
+            "mov",
+            "mov",
+            "mov",
+            "jmp",
+            "mov",
+            "and",
+            "test",
+            "jz",
+            "mov",
+            "add",
+            "jmp",
+            "mov",
+            "add",
+            "add",
+            "mov",
+            "cmp",
+            "jge",
+            "cmp",
+            "jle",
+            "mov",
+            "pop",
+            "ret"
+          ],
+          "decompile": "\nint bounded_sum(int count)\n\n{\n  int iVar1;\n  int count_local;\n  int total;\n  int i;\n  \n  total = 0;\n  for (i = 0; (i < count && (i < 0x65)); i = i + 1) {\n    iVar1 = i;\n    if ((i & 1U) != 0) {\n      iVar1 = i * 2;\n    }\n    total = total + iVar1;\n  }\n  return total;\n}\n\n",
+          "decompile_status": "success",
+          "coverage": {
+            "cfg": "complete",
+            "assembly": "complete",
+            "calls": "complete_resolved_only"
+          },
+          "partial": false,
+          "partial_reasons": [],
+          "limitations": [
+            "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+            "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+            "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+            "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+            "References cover the complete Ghidra function-body AddressSet and exact entry. Dossier incoming edges omit sources owned by that function; procedure_references also retains those internal edges.",
+            "The dossier combines Ghidra FunctionManager, Listing, ReferenceManager, BasicBlockModel, and decompiler observations; provider-specific pseudocode and assembly are not cross-provider text invariants.",
+            "Resolved reference metadata identifies computed, indirect, external, call, jump, and data edges; unresolved targetless flows remain unknown, and function classifications distinguish thunks and externals.",
+            "Synthetic Ghidra entry-point references without actionable memory sources are omitted.",
+            "The Java bridge serializes one function request per Program and lets each decompilation run until it completes or the caller cancels.",
+            "Unresolved computed or indirect flows without target addresses are not represented as reference edges.",
+            "Thunk and external classifications are Ghidra FunctionManager observations; they do not resolve targetless calls.",
+            "Pseudocode and assembly are Ghidra-specific representations, not original source or Hopper-equivalent text.",
+            "Only resolved Ghidra call references are returned; unresolved computed or indirect calls remain unknown, while function classifications distinguish thunks and externals."
+          ],
+          "truncated": false,
+          "evidence_id": "ev_00000000000000000000000000000028",
+          "relationship_coverage": {
+            "status": "complete",
+            "diagnostics": [
+              "Only resolved Ghidra call references are returned; unresolved computed or indirect calls remain unknown, while function classifications distinguish thunks and externals."
+            ]
+          }
+        }
+      }
+    },
+    {
+      "step": 2,
+      "kind": "tool_result",
+      "name": "get_mismatches",
+      "tool_call_id": "call-2-2",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111"
+      },
+      "result": {
+        "ok": true,
+        "result": [
+          {
+            "test_id": "arg-101",
+            "execution_status": "measured",
+            "match": false,
+            "observation_categories": [
+              "mismatched"
+            ],
+            "original_exit_code": 0,
+            "reimplementation_exit_code": 0
+          }
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "kind": "proposal",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call-6-0",
+          "type": "function",
+          "function": {
+            "name": "get_evidence",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111",
+              "evidence_id": "ev_00000000000000000000000000000038"
+            }
+          }
+        },
+        {
+          "id": "call-6-1",
+          "type": "function",
+          "function": {
+            "name": "get_evidence",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111",
+              "evidence_id": "ev_00000000000000000000000000000039"
+            }
+          }
+        },
+        {
+          "id": "call-6-2",
+          "type": "function",
+          "function": {
+            "name": "get_evidence",
+            "arguments": {
+              "run_id": "run_11111111111111111111111111111111",
+              "evidence_id": "ev_0000000000000000000000000000003a"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "kind": "tool_result",
+      "name": "get_evidence",
+      "tool_call_id": "call-6-0",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111",
+        "evidence_id": "ev_00000000000000000000000000000038"
+      },
+      "result": {
+        "ok": true,
+        "result": {
+          "evidence_id": "ev_00000000000000000000000000000038",
+          "run_id": "run_11111111111111111111111111111111",
+          "attempt_id": "attempt_22222222222222222222222222222222",
+          "kind": "execution",
+          "target": "original",
+          "tool": "Docker",
+          "sha256": "8362f49ae39d64b791386a9d3c9d12eac56427cd9fad63ff2d0df50ed430b57b",
+          "source": "test:arg-101",
+          "created": "2026-11-15T12:31:14.490487+00:00",
+          "data": {
+            "test_id": "arg-101",
+            "actual_input": {
+              "args": [
+                "101"
+              ],
+              "stdin": "",
+              "auxiliary_files": [],
+              "env": {}
+            },
+            "status": "success",
+            "infrastructure_ok": true,
+            "stdout": "recheck_probe=7450\n",
+            "stderr": "",
+            "stdout_b64": "cmVjaGVja19wcm9iZT03NDUwCg==",
+            "stderr_b64": "",
+            "exit_code": 0,
+            "target_exit_code": 0,
+            "timed_out": false,
+            "cancelled": false,
+            "truncated": false,
+            "oom_killed": false,
+            "binary_sha256": "8362f49ae39d64b791386a9d3c9d12eac56427cd9fad63ff2d0df50ed430b57b",
+            "image_id": "sha256:69ff214fc3606448b71e0d791f5320e8017751a87b2e5386c1fa47ec1ad94091",
+            "limits": {
+              "memory_mb": 512,
+              "cpus": 1.0,
+              "timeout_seconds": 10.0,
+              "output_bytes": 1048576
+            },
+            "protections": {
+              "input_readonly": true,
+              "network": "none",
+              "root_readonly": true,
+              "isolation": "linux-namespaces",
+              "note": "읽기 전용 루트 + cap-drop ALL + no-new-privileges"
+            },
+            "cleanup_errors": [],
+            "duration": 0.3699,
+            "evidence_id": "ev_00000000000000000000000000000038"
+          },
+          "projection": {
+            "kind": "selected_execution_observations",
+            "omitted_fields": [
+              "container_id",
+              "container_logs",
+              "container_name",
+              "container_state",
+              "create",
+              "environment",
+              "execution",
+              "image",
+              "input_staging",
+              "inspect_process",
+              "managed_environment"
+            ],
+            "full_record": "The complete record is stored locally under the same evidence_id."
+          }
+        }
+      }
+    },
+    {
+      "step": 3,
+      "kind": "tool_result",
+      "name": "get_evidence",
+      "tool_call_id": "call-6-1",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111",
+        "evidence_id": "ev_00000000000000000000000000000039"
+      },
+      "result": {
+        "ok": true,
+        "result": {
+          "evidence_id": "ev_00000000000000000000000000000039",
+          "run_id": "run_11111111111111111111111111111111",
+          "attempt_id": "attempt_22222222222222222222222222222222",
+          "kind": "execution",
+          "target": "reimplementation",
+          "tool": "Docker",
+          "sha256": "7f86556c6cef0a14520085fce8e9c182d2c8175de84474e3a02d523863231fbe",
+          "source": "test:arg-101",
+          "created": "2026-11-15T12:31:17.969877+00:00",
+          "data": {
+            "test_id": "arg-101",
+            "actual_input": {
+              "args": [
+                "101"
+              ],
+              "stdin": "",
+              "auxiliary_files": [],
+              "env": {}
+            },
+            "status": "success",
+            "infrastructure_ok": true,
+            "stdout": "recheck_probe=7550\n",
+            "stderr": "",
+            "stdout_b64": "cmVjaGVja19wcm9iZT03NTUwCg==",
+            "stderr_b64": "",
+            "exit_code": 0,
+            "target_exit_code": 0,
+            "timed_out": false,
+            "cancelled": false,
+            "truncated": false,
+            "oom_killed": false,
+            "binary_sha256": "7f86556c6cef0a14520085fce8e9c182d2c8175de84474e3a02d523863231fbe",
+            "image_id": "sha256:69ff214fc3606448b71e0d791f5320e8017751a87b2e5386c1fa47ec1ad94091",
+            "limits": {
+              "memory_mb": 512,
+              "cpus": 1.0,
+              "timeout_seconds": 10.0,
+              "output_bytes": 1048576
+            },
+            "protections": {
+              "input_readonly": true,
+              "network": "none",
+              "root_readonly": true,
+              "isolation": "linux-namespaces",
+              "note": "읽기 전용 루트 + cap-drop ALL + no-new-privileges"
+            },
+            "cleanup_errors": [],
+            "duration": 0.3693,
+            "evidence_id": "ev_00000000000000000000000000000039"
+          },
+          "projection": {
+            "kind": "selected_execution_observations",
+            "omitted_fields": [
+              "container_id",
+              "container_logs",
+              "container_name",
+              "container_state",
+              "create",
+              "environment",
+              "execution",
+              "image",
+              "input_staging",
+              "inspect_process",
+              "managed_environment"
+            ],
+            "full_record": "The complete record is stored locally under the same evidence_id."
+          }
+        }
+      }
+    },
+    {
+      "step": 3,
+      "kind": "tool_result",
+      "name": "get_evidence",
+      "tool_call_id": "call-6-2",
+      "arguments": {
+        "run_id": "run_11111111111111111111111111111111",
+        "evidence_id": "ev_0000000000000000000000000000003a"
+      },
+      "result": {
+        "ok": true,
+        "result": {
+          "evidence_id": "ev_0000000000000000000000000000003a",
+          "run_id": "run_11111111111111111111111111111111",
+          "attempt_id": "attempt_22222222222222222222222222222222",
+          "kind": "behavior",
+          "target": "both",
+          "tool": "Recheck",
+          "sha256": "",
+          "source": "",
+          "created": "2026-11-15T12:31:18.013971+00:00",
+          "data": {
+            "tests": [
+              {
+                "test_id": "arg-8",
+                "execution_status": "measured",
+                "match": true,
+                "observation_categories": [
+                  "matched"
+                ],
+                "original_exit_code": 0,
+                "reimplementation_exit_code": 0
+              },
+              {
+                "test_id": "arg-100",
+                "execution_status": "measured",
+                "match": true,
+                "observation_categories": [
+                  "matched"
+                ],
+                "original_exit_code": 0,
+                "reimplementation_exit_code": 0
+              },
+              {
+                "test_id": "arg-101",
+                "execution_status": "measured",
+                "match": false,
+                "observation_categories": [
+                  "mismatched"
+                ],
+                "original_exit_code": 0,
+                "reimplementation_exit_code": 0
+              }
+            ],
+            "matched": 2,
+            "denominator": 3,
+            "registered": 3,
+            "match_rate": 0.6666666666666666,
+            "category_counts": {
+              "matched": 2,
+              "mismatched": 1,
+              "infrastructure_failure": 0,
+              "unsupported_or_blocked": 0,
+              "cancelled": 0,
+              "timed_out": 0,
+              "oom": 0,
+              "output_truncated": 0
+            },
+            "formula": "일치한 유효 테스트 쌍 / 양쪽 모두 정상 수집된 테스트 쌍 (시간초과·취소·OOM·출력잘림·인프라실패 제외)",
+            "normalization": {
+              "newlines": false,
+              "trailing_whitespace": false
+            },
+            "scope": "등록하여 실행한 입력 범위에서만 확인한 결과",
+            "producer": "Recheck"
+          }
+        }
+      }
+    }
+  ]
+}
