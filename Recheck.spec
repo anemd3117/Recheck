@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+from scripts.collect_distribution_notices import reviewed_qt_binary
 
 root = Path(SPECPATH)
 identity_path = Path(os.environ.get('RECHECK_BUILD_IDENTITY', ''))
@@ -55,10 +56,15 @@ a = Analysis(
         'PySide6.QtWebEngineWidgets',
         'PySide6.QtQml',
         'PySide6.QtQuick',
+        'PySide6.QtNetwork',
         'tkinter',
     ],
     noarchive=False,
 )
+# Widgets use the Windows raster backend. Do not pick up the optional Mesa
+# software renderer or host applications' OpenSSL DLLs through unused QtNetwork.
+a.binaries = [row for row in a.binaries if reviewed_qt_binary(row[0])]
+a.datas = [row for row in a.datas if reviewed_qt_binary(row[0])]
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,

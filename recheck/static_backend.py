@@ -21,6 +21,7 @@ import uuid
 
 from .adapters import DockerAdapter, _event, _ok, resource_root, validate_static
 from .models import Settings, atomic_json, inspect_binary
+from .paths import filesystem_path, plain_local_path
 
 WORKER_CONTRACT = 'rea-static-1.0'
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
@@ -30,7 +31,7 @@ _IMAGE_ID = re.compile(r'^sha256:[a-f0-9]{64}$')
 
 def _digest(path):
     digest = hashlib.sha256()
-    with path.open('rb') as stream:
+    with filesystem_path(path).open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(chunk)
     return digest.hexdigest()
@@ -41,12 +42,12 @@ def _checksum(value):
 
 
 def _safe_path(path):
-    path = Path(path).absolute()
+    path = plain_local_path(path).absolute()
     if any(char in str(path) for char in ('\x00', '\r', '\n', ',')):
         raise ValueError('Unsafe Docker mount path')
     for component in (path, *path.parents):
         try:
-            info = component.lstat()
+            info = filesystem_path(component).lstat()
         except FileNotFoundError:
             continue
         if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
@@ -70,9 +71,9 @@ def _relative(name):
 
 def _read_json(path, limit=MAX_ARTIFACT_BYTES):
     path = _safe_path(path)
-    if not path.is_file() or path.stat().st_size > limit:
+    if not filesystem_path(path).is_file() or filesystem_path(path).stat().st_size > limit:
         raise ValueError('Missing or oversized static analysis artifact')
-    return json.loads(path.read_text(encoding='utf-8'))
+    return json.loads(filesystem_path(path).read_text(encoding='utf-8'))
 
 
 def _validate_artifact(data, expected_hash):
@@ -159,7 +160,8 @@ class ContainerStaticAdapter:
                 raise ValueError('A local Docker engine is required for static analysis')
             if engine.get('os') != 'linux' or engine.get('arch') not in ('amd64', 'x86_64'):
                 raise ValueError('Static analysis requires a Linux amd64 Docker engine')
-            manifest = _read_json(self.resources / 'runtime/environment.json')
+            resolve = getattr(self.runtime, 'image_specifications', None)
+            manifest = resolve() if resolve else _read_json(self.resources / 'runtime/environment.json')
             specification = manifest['images']['static']
             image_id = specification['image_id']
             if not isinstance(image_id, str) or not _IMAGE_ID.fullmatch(image_id):
@@ -252,12 +254,12 @@ class ContainerStaticAdapter:
         files, total = {}, 0
         for name in data['raw_evidence']['files']:
             path = _safe_path(output.joinpath(*_relative(name).parts))
-            if not path.is_relative_to(output) or not path.is_file():
+            if not path.is_relative_to(output) or not filesystem_path(path).is_file():
                 raise ValueError('Missing raw static evidence file')
-            total += path.stat().st_size
+            total += filesystem_path(path).stat().st_size
             if total > MAX_EVIDENCE_BYTES:
                 raise ValueError('Raw static evidence exceeds its size budget')
-            content = path.read_bytes()
+            content = filesystem_path(path).read_bytes()
             files[name] = dict(
                 sha256=hashlib.sha256(content).hexdigest(),
                 base64=base64.b64encode(content).decode('ascii'),
@@ -291,8 +293,8 @@ class ContainerStaticAdapter:
         # Nothing is written until the complete envelope and evidence have passed.
         for name, content in decoded.items():
             path = _safe_path(output.joinpath(*_relative(name).parts))
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
+            filesystem_path(path.parent).mkdir(parents=True, exist_ok=True)
+            filesystem_path(path).write_bytes(content)
         atomic_json(output / 'result.json', artifact)
         return artifact
 
@@ -300,12 +302,12 @@ class ContainerStaticAdapter:
         """Publish only checked artifacts, never the worker's whole writable project tree."""
         for name, entry in evidence.items():
             path = _safe_path(output.joinpath(*_relative(name).parts))
-            path.parent.mkdir(parents=True, exist_ok=True)
+            filesystem_path(path.parent).mkdir(parents=True, exist_ok=True)
             _safe_path(path)
             content = base64.b64decode(entry['base64'], validate=True)
             if hashlib.sha256(content).hexdigest() != entry['sha256']:
                 raise ValueError('Static evidence changed before publication')
-            path.write_bytes(content)
+            filesystem_path(path).write_bytes(content)
         atomic_json(output / 'result.json', data)
 
     @staticmethod
@@ -352,20 +354,20 @@ class ContainerStaticAdapter:
             ):
                 raise ValueError('Invalid static analysis timeout')
             binary, workspace = _safe_path(binary), _safe_path(workspace)
-            if not binary.is_file():
+            if not filesystem_path(binary).is_file():
                 raise ValueError('Static analysis requires a regular input file')
             expected_hash = _digest(binary)
             result['sha256'] = expected_hash
-            workspace.mkdir(parents=True, exist_ok=True)
+            filesystem_path(workspace).mkdir(parents=True, exist_ok=True)
             _safe_path(workspace)
             invocation = workspace / ('static-' + uuid.uuid4().hex)
             input_dir, output = invocation / 'input', invocation / 'output'
-            input_dir.mkdir(parents=True)
-            output.mkdir()
-            output.chmod(0o777)
+            filesystem_path(input_dir).mkdir(parents=True)
+            filesystem_path(output).mkdir()
+            filesystem_path(output).chmod(0o777)
             snapshot = input_dir / 'target'
-            shutil.copyfile(binary, snapshot)
-            snapshot.chmod(0o644)
+            shutil.copyfile(filesystem_path(binary), filesystem_path(snapshot))
+            filesystem_path(snapshot).chmod(0o644)
             if _digest(snapshot) != expected_hash or _digest(binary) != expected_hash:
                 raise ValueError('Input snapshot hash mismatch')
             signature = dict(
@@ -375,11 +377,11 @@ class ContainerStaticAdapter:
             )
             if self.cache_dir:
                 cache_dir = _safe_path(self.cache_dir)
-                cache_dir.mkdir(parents=True, exist_ok=True)
+                filesystem_path(cache_dir).mkdir(parents=True, exist_ok=True)
                 cache_key = _checksum(signature)
                 cache_path = cache_dir / (cache_key + '.json')
                 result['cache']['key'] = cache_key
-                if cache_path.exists():
+                if filesystem_path(cache_path).exists():
                     try:
                         data = self._restore_cache(cache_path, signature, output)
                         if _digest(binary) != expected_hash or _digest(snapshot) != expected_hash:
@@ -413,7 +415,7 @@ class ContainerStaticAdapter:
                 worker_output.mkdir()
                 worker_output.chmod(0o777)
                 mounted_snapshot = mount_input / 'target'
-                shutil.copyfile(snapshot, mounted_snapshot)
+                shutil.copyfile(filesystem_path(snapshot), mounted_snapshot)
                 mounted_snapshot.chmod(0o644)
                 if _digest(mounted_snapshot) != expected_hash:
                     raise ValueError('Short input snapshot hash mismatch')
@@ -476,7 +478,7 @@ class ContainerStaticAdapter:
                     max_functions=10000,
                     max_decompile=100,
                 )
-                if inspect_binary(snapshot).get('managed'):
+                if inspect_binary(mounted_snapshot).get('managed'):
                     request['analysis_kind'] = 'managed'
                 worker = await self.docker.call(
                     'start',

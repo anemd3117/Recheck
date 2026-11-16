@@ -13,6 +13,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from recheck.models import atomic_json
+from scripts.collect_distribution_notices import collect_notices, fetch_sources, DEFAULT_CACHE
 
 ROOT = Path(__file__).resolve().parents[1]
 CURATED_DOCS = (
@@ -24,6 +25,11 @@ CURATED_DOCS = (
     '검증범위.txt',
     'DISTRIBUTION_AND_RECOVERY.md',
     'WINDOWS_DOCKER.md',
+    'FIRST_RUN.md',
+    'BINARY_DISTRIBUTION.md',
+    'PUBLIC_HISTORY.md',
+    'PUBLICATION_SCOPE.md',
+    'PROJECT_STATUS.md',
 )
 MANAGED_COMPONENTS = ('static', 'execution', 'ollama')
 
@@ -217,7 +223,9 @@ def main(args):
     if completed.returncode:
         raise RuntimeError('Windows 패키징 실패: ' + str(out / 'build.log'))
     staged = out / 'staged-dist' / 'Recheck'
-    prepare_distribution_files(staged, include_environment=not args.app_only)
+    prepare_distribution_files(staged, include_environment=bool(args.include_environment))
+    fetch_sources(args.source_cache)
+    collect_notices(staged, source_cache=args.source_cache)
     atomic_json(out / 'staged-inventory.json', inventory(staged))
     print(staged / 'Recheck.exe')
 
@@ -226,9 +234,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', required=True)
     parser.add_argument('--publish', action='store_true')
-    parser.add_argument(
+    environment = parser.add_mutually_exclusive_group()
+    environment.add_argument(
         '--app-only',
         action='store_true',
-        help='Developer build only: explicitly omit offline environment archives',
+        help='Portable public build (default): omit offline environment archives',
     )
+    environment.add_argument('--include-environment', action='store_true',
+                             help='Explicit private/offline build: include reviewed environment archives')
+    parser.add_argument('--source-cache', default=str(DEFAULT_CACHE))
     main(parser.parse_args())

@@ -2,6 +2,35 @@ import importlib
 import pytest
 
 
+@pytest.mark.parametrize('damage', [None, 'context', 'receipt'])
+def test_native_gate_uses_only_context_bound_local_execution_identity(tmp_path, damage):
+    import json
+    from recheck.runtime_source import context_digest
+
+    m = importlib.import_module('scripts.verify_native_release')
+    resources = tmp_path / 'stage/_internal/resources'
+    (resources / 'runtime').mkdir(parents=True)
+    manifest = resources / 'runtime/environment.json'
+    manifest.write_text(json.dumps({'version': 1, 'images': {
+        c: {'image_id': 'sha256:' + str(n) * 64, 'platform': 'linux/amd64'}
+        for n, c in enumerate(('static', 'execution', 'ollama'), 1)}}))
+    for c in ('static', 'execution', 'ollama'):
+        (resources / 'docker' / c).mkdir(parents=True)
+        (resources / 'docker' / c / 'Dockerfile').write_text('FROM scratch\n')
+    receipt = tmp_path / 'data/runtime/local-builds.json'
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text(json.dumps({'version': 1, 'build_contract': 'source-v1', 'images': {
+        'execution': {'image_id': 'sha256:' + '9' * 64, 'platform': 'linux/amd64',
+                      'context_sha256': context_digest(resources, 'execution', manifest)}}}))
+    if damage == 'context':
+        (resources / 'docker/execution/Dockerfile').write_text('FROM changed\n')
+    elif damage == 'receipt':
+        receipt.write_text('{broken receipt')
+    assert hasattr(m, 'expected_execution_image'), 'Native gate cannot resolve local builds'
+    expected = 'sha256:' + ('9' if damage is None else '2') * 64
+    assert m.expected_execution_image(tmp_path / 'stage', tmp_path / 'data') == expected
+
+
 def test_unmeasured_or_wrong_verdicts_cannot_satisfy_native_release_gate():
     assert importlib.util.find_spec('scripts.verify_native_release'), 'native verifier missing'
     m = importlib.import_module('scripts.verify_native_release')

@@ -34,6 +34,8 @@ build/
 !/docs/WINDOWS_DOCKER.md
 !/docs/검증범위.txt
 !/docs/DISTRIBUTION_AND_RECOVERY.md
+!/docs/BINARY_DISTRIBUTION.md
+!/docs/FIRST_RUN.md
 
 # Existing presentation artifacts are kept locally.
 /Recheck_Light*.pptx

@@ -1,8 +1,8 @@
 # 배포 경로와 복구
 
-현재 공개 저장소는 소스 공개용입니다. 기존 실행 파일·원래 태그·검증 기록은
-별도 비공개 보관 저장소에 남아 있으며 공개 ZIP은 제공하지 않습니다.
-아래 절차는 개발자가 이후 검토한 새 배포본을 만들 때의 절차입니다.
+새 공개 Windows ZIP은 Recheck.exe와 실행용 Python·Qt, 고지·대응 소스 자료를 포함합니다.
+기존 실행 파일·원래 태그·검증 기록은 별도 비공개 보관 저장소에 남습니다.
+사용자는 [처음 실행](FIRST_RUN.md), 개발자는 아래의 새 배포본 검증·교체 절차를 따릅니다.
 [공개 범위](PUBLICATION_SCOPE.md)와 [공개 이력 구성](PUBLIC_HISTORY.md)을 함께 따르세요.
 
 ## 실행 위치
@@ -15,7 +15,7 @@
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Output verification/builds/my-release
 ```
 
-전체 pytest와 Node 검사를 실행하고 검사 전후 빌드 입력이 같을 때만 identity를 갱신합니다. 새 `package/staged-dist/Recheck`에 빌드하며 현재 실행 폴더는 건드리지 않습니다. 이미지 3개의 manifest·크기·SHA-256을 대조하고 선별한 문서만 복사합니다. 기존 이미지도 검사를 생략하지 않습니다.
+공개 앱은 먼저 `scripts/verify_source.py --output <새 검사 폴더>`로 전체 pytest와 Node 검사를 실행하고 검사 전후 빌드 입력이 같을 때만 identity를 갱신합니다. 이어 `scripts/package_verified.py --output <새 패키지 폴더> --app-only`로 새 `package/staged-dist/Recheck`에 빌드합니다. 현재 실행 폴더는 건드리지 않습니다. 공개 앱 ZIP은 기존 Docker TAR를 포함하지 않으며 새 PC에서 명시적 분석 환경 준비로 구성합니다. 별도 오프라인 배포에서는 이미지 3개의 manifest·크기·SHA-256도 대조하고 재배포 자료를 따로 검토합니다.
 
 실제 Windows EXE 시작과 frozen CLI 실행 비교 후, native 검사 결과와 전체 inventory를 담은 증거 파일로 반영합니다. 성공 값을 임의로 기록해 검사를 우회하면 안 됩니다.
 

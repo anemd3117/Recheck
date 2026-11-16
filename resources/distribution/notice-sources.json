@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "build_versions": {
+    "CPython": "3.14.8",
+    "PySide6_Essentials": "6.12.0",
+    "shiboken6": "6.12.0"
+  },
+  "sources": [
+    {
+      "component": "qtbase",
+      "version": "6.12.0",
+      "filename": "qtbase-everywhere-src-6.12.0.tar.xz",
+      "url": "https://download.qt.io/official_releases/qt/6.12/6.12.0/submodules/qtbase-everywhere-src-6.12.0.tar.xz",
+      "sha256": "a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307",
+      "size_bytes": 51220268
+    },
+    {
+      "component": "qtsvg",
+      "version": "6.12.0",
+      "filename": "qtsvg-everywhere-src-6.12.0.tar.xz",
+      "url": "https://download.qt.io/official_releases/qt/6.12/6.12.0/submodules/qtsvg-everywhere-src-6.12.0.tar.xz",
+      "sha256": "e4ab39534ec97987b1b9b60ef7f4d3253d5912a69f8c713a01753174a4029331",
+      "size_bytes": 2341876
+    },
+    {
+      "component": "pyside-setup",
+      "version": "6.12.0",
+      "filename": "pyside-setup-everywhere-src-6.12.0.tar.xz",
+      "url": "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.12.0-src/pyside-setup-everywhere-src-6.12.0.tar.xz",
+      "sha256": "099c1a597cf33c1b000e11cf68a0b82d216fb802bf81726efc720394f10c7751",
+      "size_bytes": 18211772
+    }
+  ],
+  "notice_files": [
+    {
+      "filename": "CPython-3.14.8-license.html",
+      "url": "https://docs.python.org/release/3.14.8/license.html",
+      "size_bytes": 90333,
+      "sha256": "b469f0d24f74edf698f92b99eb89a626924b84806bf7a1cfc9f2dfada9534fc7"
+    },
+    {
+      "filename": "OpenSSL-3.5.9-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.9/LICENSE.txt",
+      "size_bytes": 10175,
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+    },
+    {
+      "filename": "OpenSSL-4.0.3-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-4.0.3/LICENSE.txt",
+      "size_bytes": 10175,
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+    }
+  ]
+}

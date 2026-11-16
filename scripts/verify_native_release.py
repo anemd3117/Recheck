@@ -14,6 +14,17 @@ from recheck.models import Settings, atomic_json
 from scripts.release_distribution import inventory, sha
 
 
+def expected_execution_image(stage, data):
+    from recheck.managed_runtime import ManagedRuntime
+
+    resources = Path(stage) / '_internal/resources'
+    runtime = ManagedRuntime(
+        Settings(), manifest_path=resources / 'runtime/environment.json',
+        resources_dir=resources, receipt_path=Path(data) / 'runtime/local-builds.json',
+        bundle_dir=Path(stage) / 'environment')
+    return runtime.image_specifications()['images']['execution']['image_id']
+
+
 def validate_dynamic(run, expected):
     behavior = run.get('behavior', {})
     tests = behavior.get('tests', [])
@@ -40,7 +51,8 @@ def validate_observations(run, oracle, image_id):
                     raise ValueError('Frozen raw output differs from precommitted ground truth')
 
 
-def verify(stage, output, original, changed, tests, expected, oracle):
+def verify(stage, output, original, changed, tests, expected, oracle, *,
+           prepare_from_sources=False, without_host_tools=False):
     stage, output = Path(stage).resolve(strict=True), Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     before = inventory(stage)
@@ -48,6 +60,10 @@ def verify(stage, output, original, changed, tests, expected, oracle):
     env = {**os.environ, 'RECHECK_DATA_DIR': str(output / 'data'),
            'RECHECK_SMOKE_DIR': str(output / 'smoke'), 'PYTHONUTF8': '1'}
     env.pop('QT_QPA_PLATFORM', None)
+    if without_host_tools:
+        env['PATH'] = str(Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32')
+        env.pop('PYTHONHOME', None)
+        env.pop('PYTHONPATH', None)
     atomic_json(output / 'data/settings.json', Settings().model_dump())
     records = []
 
@@ -68,6 +84,15 @@ def verify(stage, output, original, changed, tests, expected, oracle):
     smoke = json.loads((output / 'smoke/gui-smoke.json').read_text(encoding='utf-8'))
     if not smoke.get('visible') or not (output / 'smoke/gui-smoke.png').is_file():
         raise ValueError('Native GUI did not become visible')
+    if execute('tools', ['--cli', '--json-output', output / 'tools.json', 'tools'], 90) not in (0, 2):
+        raise ValueError('Frozen tool discovery failed')
+    tools = json.loads((output / 'tools.json').read_text(encoding='utf-8'))
+    if tools.get('app_runtime', {}).get('python') != 'bundled':
+        raise ValueError('Frozen tool discovery did not recognize its bundled Python')
+    if prepare_from_sources:
+        if execute('prepare-tools', ['--cli', '--data-dir', output / 'data',
+                   '--json-output', output / 'prepare-tools.json', 'prepare-tools', '--build'], 1800) != 0:
+            raise ValueError('Frozen first-use source preparation failed')
     code = execute('dynamic', ['--cli', '--data-dir', output / 'data', '--json-output',
                    output / 'dynamic-public.json', 'analyze', '--original', Path(original).resolve(),
                    '--reimplementation', Path(changed).resolve(), '--tests', Path(tests).resolve(),
@@ -77,8 +102,7 @@ def verify(stage, output, original, changed, tests, expected, oracle):
     if code != 0:
         raise ValueError('Frozen dynamic process failed; see native process record')
     validate_dynamic(run, expected)
-    manifest = json.loads((stage / '_internal/resources/runtime/environment.json').read_text(encoding='utf-8'))
-    validate_observations(run, oracle, manifest['images']['execution']['image_id'])
+    validate_observations(run, oracle, expected_execution_image(stage, output / 'data'))
     if before != inventory(stage):
         raise ValueError('Release payload changed during native verification')
     embedded = json.loads((stage / '_internal/RECHECK_SOURCE_IDENTITY.json').read_text(encoding='utf-8'))
@@ -87,6 +111,9 @@ def verify(stage, output, original, changed, tests, expected, oracle):
                  checks={'native_smoke': True, 'frozen_dynamic': True, 'literal_observations': True},
                  processes=records, run_id=run['run_id'], behavior=run['behavior'],
                  scope='Actual native Windows GUI smoke and frozen Linux dynamic comparison; no VM claim')
+    proof['checks'].update(frozen_tool_discovery=True,
+                          frozen_source_preparation=prepare_from_sources,
+                          host_path_disabled=without_host_tools)
     atomic_json(output / 'native-proof.json', proof)
     return proof
 
@@ -95,10 +122,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('stage', 'output', 'original', 'changed', 'tests', 'expected', 'oracle'):
         parser.add_argument('--' + name, required=True)
+    parser.add_argument('--prepare-from-sources', action='store_true')
+    parser.add_argument('--without-host-tools', action='store_true')
     args = parser.parse_args()
     expected = json.loads(Path(args.expected).read_text(encoding='utf-8'))
     if not isinstance(expected, list) or not expected or any(type(x) is not bool for x in expected):
         raise ValueError('Expected verdicts must be a precommitted list of booleans')
     oracle = json.loads(Path(args.oracle).read_text(encoding='utf-8'))
-    result = verify(args.stage, args.output, args.original, args.changed, args.tests, expected, oracle)
+    result = verify(args.stage, args.output, args.original, args.changed, args.tests, expected, oracle,
+                    prepare_from_sources=args.prepare_from_sources,
+                    without_host_tools=args.without_host_tools)
     print(json.dumps({key: value for key, value in result.items() if key != 'inventory'}, indent=2))

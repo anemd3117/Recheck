@@ -1,4 +1,4 @@
-"""Pinned, offline-first Recheck workers. No runtime builds or host tool installs."""
+"""Pinned Recheck workers; source builds require a separate explicit setup action."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import sys
 import time
 
 from .adapters import DockerAdapter, _ok
-from .models import resources_root
+from .models import data_root, resources_root
 
 _DIGEST = re.compile(r'sha256:[0-9a-f]{64}\Z')
 _DISTRIBUTION = re.compile(r'[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}\Z')
@@ -45,7 +45,8 @@ class ManagedRuntime:
     before any publisher-authorized immutable registry reference.
     """
 
-    def __init__(self, settings, *, docker=None, manifest_path=None, bundle_dir=None):
+    def __init__(self, settings, *, docker=None, manifest_path=None, bundle_dir=None,
+                 resources_dir=None, receipt_path=None):
         self.settings = settings
         context = (
             settings.get('docker_context', '')
@@ -64,6 +65,8 @@ class ManagedRuntime:
             else Path(__file__).resolve().parent.parent
         )
         self.bundle_dir = Path(bundle_dir) if bundle_dir else base / 'environment'
+        self.resources_dir = Path(resources_dir) if resources_dir else self.manifest_path.parent.parent
+        self.receipt_path = Path(receipt_path) if receipt_path else data_root() / 'runtime/local-builds.json'
         self.ollama_url = None
 
     def _manifest(self):
@@ -101,6 +104,27 @@ class ManagedRuntime:
             and bool(_DIGEST.fullmatch(value))
             and value != 'sha256:' + '0' * 64
         )
+
+    def image_specifications(self):
+        """Return validated published IDs or context-bound IDs built on this PC."""
+        from .runtime_source import local_image_receipts
+
+        manifest = self._manifest()
+        local = local_image_receipts(self.resources_dir, self.manifest_path, self.receipt_path)
+        for component, receipt in local.items():
+            manifest['images'][component] = {
+                **manifest['images'][component], **receipt, 'origin': 'local_source_build',
+                'ref': receipt['image_id'], 'trusted_distribution': False,
+            }
+            manifest['images'][component].pop('archive', None)
+            manifest['images'][component].pop('archive_sha256', None)
+        return manifest
+
+    async def build_from_sources(self, *, cancel=None, on_event=None, include_ollama=False):
+        from .runtime_source import build_runtime_images
+
+        return await build_runtime_images(self, cancel=cancel, on_event=on_event,
+                                          include_ollama=include_ollama)
 
     @staticmethod
     def _archive_spec(spec):
@@ -181,6 +205,10 @@ class ManagedRuntime:
                 and data.get('Architecture') == 'amd64'
                 and label.get('org.recheck.component') == component
             )
+            if valid and spec.get('origin') == 'local_source_build':
+                from .runtime_source import valid_built_image
+
+                valid = valid_built_image(data, component, spec['image_id'], spec['context_sha256'])
         except (ValueError, IndexError, TypeError, AttributeError, KeyError):
             data, valid = {}, False
         record.update(ready=valid, status='ready' if valid else 'invalid', details=data)
@@ -192,7 +220,7 @@ class ManagedRuntime:
 
     async def probe(self):
         try:
-            manifest = self._manifest()
+            manifest = self.image_specifications()
         except (OSError, ValueError, TypeError) as exc:
             return self._result(
                 'manifest_invalid', '관리 환경 배포 정보를 확인할 수 없습니다.', reason=str(exc)
@@ -322,7 +350,7 @@ class ManagedRuntime:
         try:
             _check_cancel(cancel)
             try:
-                manifest = self._manifest()
+                manifest = self.image_specifications()
             except (OSError, ValueError, TypeError) as exc:
                 return self._result(
                     'manifest_invalid', '관리 환경 배포 정보가 올바르지 않습니다.', reason=str(exc)

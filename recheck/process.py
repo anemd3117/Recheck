@@ -10,6 +10,8 @@ import signal
 import subprocess
 import time
 
+from .paths import plain_local_path
+
 
 class _WindowsJob:
     """Own trusted-tool descendants, including after their parent has exited."""
@@ -143,6 +145,16 @@ async def run_process(
             raise ValueError(
                 "Ghidra batch launcher path contains shell metacharacters; use a simple path"
             )
+        # cmd.exe does not understand the extended local filesystem namespace.
+        # Unwrap only the executable/cwd boundary, never arbitrary argument text.
+        launcher = str(plain_local_path(argv[0]))
+        if len(launcher.encode('utf-16-le')) // 2 >= 260:
+            raise ValueError('배치 실행 도구는 짧은 경로에 설치해 주세요. cmd.exe 경로 제한을 초과했습니다.')
+        argv[0] = launcher
+        if cwd is not None:
+            cwd = str(plain_local_path(cwd))
+            if len(cwd.encode('utf-16-le')) // 2 >= 260:
+                raise ValueError('배치 실행 도구의 작업 폴더를 짧은 경로로 지정해 주세요.')
         # CreateProcess launches .bat/.cmd through Windows itself. Prepending cmd
         # would double-escape quotes and break paths with spaces. Every argument
         # above has been checked against cmd expansion/metacharacters.

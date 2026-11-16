@@ -267,5 +267,12 @@ def test_missing_packaged_image_does_not_tell_user_to_reinstall_running_docker(w
     window.environment_done(
         {'ollama': {}, 'docker': {'ready': False, 'engine_ready': True}, 'ghidra': {'ready': False}}
     )
-    assert '동봉된 실행 환경' in window.tool_help_text.text()
+    assert '분석 도구 내려받아 준비' in window.tool_help_text.text()
     assert 'Docker)를 사용할 수 없습니다' not in window.tool_help_text.text()
+
+
+def test_accessible_navigation_selection_opens_the_selected_page(window):
+    window.navigation.setCurrentRow(0)
+    window.navigation.item(2).setSelected(True)
+    assert window.navigation.currentRow() == 2
+    assert window.pages.currentIndex() == 2

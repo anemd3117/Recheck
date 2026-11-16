@@ -16,6 +16,11 @@ DOCS = (
     '검증범위.txt',
     'DISTRIBUTION_AND_RECOVERY.md',
     'WINDOWS_DOCKER.md',
+    'FIRST_RUN.md',
+    'BINARY_DISTRIBUTION.md',
+    'PUBLIC_HISTORY.md',
+    'PUBLICATION_SCOPE.md',
+    'PROJECT_STATUS.md',
 )
 COMPONENTS = ('static', 'execution', 'ollama')
 

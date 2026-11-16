@@ -295,6 +295,12 @@ def _parser():
     )
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('environment')
+    sub.add_parser('tools', help='기본 도구 설치 상태만 확인; 설치·서비스 시작 없음')
+    prepare_tools = sub.add_parser('prepare-tools', help='처음 사용할 분석 도구를 내려받아 Docker 환경 만들기')
+    prepare_tools.add_argument('--build', action='store_true', required=True,
+                               help='다운로드·Docker 이미지 만들기를 명시적으로 허용')
+    prepare_tools.add_argument('--include-local-ai', action='store_true',
+                               help='선택 사항: Ollama 실행 환경도 만들기; 모델은 내려받지 않음')
     ai = sub.add_parser('ai', help='AI 연결 관리; test 명령만 실제 추론·비용 발생 가능')
     ai_sub = ai.add_subparsers(dest='ai_command', required=True)
     ai_sub.add_parser('profiles')
@@ -353,6 +359,16 @@ def _parser():
 
 
 def _execute(args, cancel):
+    if args.command == 'tools':
+        from .prerequisites import inspect_prerequisites
+
+        return asyncio.run(inspect_prerequisites(cancel=cancel))
+    if args.command == 'prepare-tools':
+        from .runtime_source import build_analysis_environment
+
+        return asyncio.run(build_analysis_environment(
+            _selected_settings(args), cancel=cancel, include_ollama=args.include_local_ai,
+        ))
     if args.command == 'ai':
         return _ai_result(args, cancel)
     if args.command == 'inspect':
@@ -430,7 +446,9 @@ def main(argv=None):
             signal.signal(signal.SIGINT, lambda *_: cancel.set())
         result = _execute(args, cancel)
         code = result_code(result)
-        emit_json_result(public_result(result), output)
+        # Missing prerequisites are the reason for this diagnostic command: keep
+        # its safe path/version rows visible even when readiness is partial.
+        emit_json_result(result if args.command == 'tools' else public_result(result), output)
         return code
     except HelpRequest as help_request:
         if output is not None:

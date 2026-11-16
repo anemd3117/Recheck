@@ -42,3 +42,35 @@ their presence. General upstream links alone are not a substitute.
 See docs/PUBLICATION_SCOPE.md for the publication boundary. Historical source
 tags and artifact digests remain unchanged in that private archive; new notices do not silently modify
 or retroactively certify old archives.
+
+## New portable Windows distribution
+
+The public portable-build path now collects actual notices and corresponding
+library sources into each new staging folder. It does not reuse the old private
+archives. `scripts/package_verified.py` defaults to an application-only payload:
+Recheck.exe, its Python/Qt runtime, selected guides, license texts and library
+source archives. Offline container images and model weights are omitted.
+
+The exact Qt 6.12.0 qtbase and qtsvg archives and PySide/Shiboken 6.12.0 source
+archive are delivered in `third-party-sources/`, not merely linked. Their official
+URLs, versions, sizes and SHA-256 values are pinned in
+`resources/distribution/notice-sources.json`. The collector also preserves their
+LICENSES, copyright/notice/attribution records and third-party README notices.
+The distributed LGPL option includes the LGPLv3 and GPLv3 texts. Original
+CPython and installed-package notices and version-specific CPython/OpenSSL
+materials are collected under `licenses/`.
+
+Only Qt Core/Gui/Widgets, SVG support and the selected qtbase/qtsvg plugins are
+admitted. Unused QtNetwork, Mesa software OpenGL, image-format plugins from
+other Qt modules and unneeded translation bundles are excluded. Each staged
+license/source file is inventoried and checked again before publication.
+`licenses/manifest.json` records the actual packaged material without build-PC
+paths. Changes or missing source archives fail the build/publication checks.
+
+The DLLs and Python extension modules remain replaceable in the onedir payload.
+`licenses/REPLACEMENT.md` contains concrete paths and rebuilding/replacement
+instructions, also available as [docs/BINARY_DISTRIBUTION.md](docs/BINARY_DISTRIBUTION.md).
+The application LICENSE expressly permits reversing the application solely to
+debug modifications to its LGPL libraries. No signing lock prevents running
+compatible replacements. These materials cover the portable application, not
+the separately prepared container images or independently installed tools.

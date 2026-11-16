@@ -17,6 +17,7 @@ from .adapters import DockerAdapter, GhidraAdapter, _ok, discover_docker_cli
 from .models import Settings
 from .ollama import DEFAULT_URL, OllamaClient, OllamaError, cancelled
 from .process import run_process
+from .paths import plain_local_path
 
 _SKIP = {
     '.git',
@@ -43,7 +44,7 @@ def _unique(values):
         if not value:
             continue
         path = _path(value)
-        key = str(path).casefold()
+        key = str(plain_local_path(path)).casefold()
         if key not in seen:
             seen.add(key)
             result.append(path)
@@ -69,7 +70,7 @@ def java_root(value):
 
 
 def _java_executable(root):
-    if str(root).startswith(('\\\\', '//')):
+    if str(plain_local_path(root)).startswith(('\\\\', '//')):
         return None
     return next(
         (root / 'bin' / name for name in ('java.exe', 'java') if (root / 'bin' / name).is_file()),
@@ -78,7 +79,7 @@ def _java_executable(root):
 
 
 def _ghidra_properties(root):
-    if str(root).startswith(('\\\\', '//')):
+    if str(plain_local_path(root)).startswith(('\\\\', '//')):
         return None
     launcher = root / 'support' / ('analyzeHeadless.bat' if os.name == 'nt' else 'analyzeHeadless')
     props = root / 'Ghidra/application.properties'
@@ -191,7 +192,7 @@ def find_candidates(
     queue = deque(
         (root, 0)
         for root in roots
-        if root.parent != root and not str(root).startswith(('\\\\', '//'))
+        if root.parent != root and not str(plain_local_path(root)).startswith(('\\\\', '//'))
     )
     visited, count, deadline = set(), 0, time.monotonic() + timeout
     truncated = False

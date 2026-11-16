@@ -564,7 +564,7 @@ def test_unusable_worker_receipt_is_reported_without_claiming_worker_interruptio
 @pytest.mark.parametrize(
     'outcome', ['success', 'partial', 'malformed', 'cancel-create', 'cancel-start']
 )
-def test_windows_long_workspace_uses_owned_short_mounts_and_cleans_them(configured, outcome):
+def test_windows_long_workspace_uses_owned_short_mounts_and_cleans_them(configured, monkeypatch, outcome):
     docker = configured['docker']
     docker.reject_long_mounts = True
     if outcome == 'partial':
@@ -574,11 +574,14 @@ def test_windows_long_workspace_uses_owned_short_mounts_and_cleans_them(configur
     if outcome.startswith('cancel-'):
         docker.cancel_stage = outcome.removeprefix('cancel-')
     workspace = Path('deep') / ('nested/' * 24)
-    if outcome.startswith('cancel-'):
-        with pytest.raises(asyncio.CancelledError):
-            analyze(configured, workspace=workspace)
-    else:
-        result = analyze(configured, workspace=workspace)
+    from windows_path_support import legacy_windows_io
+    with legacy_windows_io(monkeypatch):
+        if outcome.startswith('cancel-'):
+            with pytest.raises(asyncio.CancelledError):
+                analyze(configured, workspace=workspace)
+        else:
+            result = analyze(configured, workspace=workspace)
+    if not outcome.startswith('cancel-'):
         assert (
             result['status']
             == {'success': 'success', 'partial': 'partial', 'malformed': 'failed'}[outcome]
@@ -603,3 +606,28 @@ def test_windows_long_workspace_uses_owned_short_mounts_and_cleans_them(configur
     short_root = Path(tempfile.gettempdir()) / 'Recheck'
     assert all(p.is_relative_to(short_root) and len(str(p)) < 220 for p in paths)
     assert all(not p.exists() for p in paths)
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows long input/cache paths')
+def test_long_input_cache_and_evidence_survive_legacy_win32_limits(configured, monkeypatch):
+    from recheck.paths import filesystem_path
+    from windows_path_support import legacy_windows_io
+
+    root = configured['tmp_path'] / ('source-data-' * 10) / ('nested-data-' * 8)
+    filesystem_path(root).mkdir(parents=True)
+    binary = root / 'long target with spaces'
+    filesystem_path(binary).write_bytes(FIXTURE)
+    configured['binary'] = binary
+    workspace = Path('evidence') / ('nested/' * 26)
+    cache = configured['tmp_path'] / ('analysis-cache-' * 10) / ('nested-cache-' * 8)
+    with legacy_windows_io(monkeypatch):
+        first = analyze(configured, workspace=workspace, cache_dir=cache)
+        second = analyze(configured, workspace=workspace, cache_dir=cache)
+    assert first['status'] == 'success' and first['cache']['hit'] is False
+    assert second['status'] == 'success' and second['cache']['hit'] is True
+    assert len(configured['docker'].created) == 1
+    evidence = second['backend_source']['raw_evidence'][0]
+    assert '\\\\?\\' not in evidence
+    assert json.loads(filesystem_path(evidence).read_text(encoding='utf-8')) == [{'name': 'main'}]
+    commands = configured['docker'].created[0]
+    assert all('\\\\?\\' not in str(value) for value in commands)

@@ -11,6 +11,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from recheck.models import atomic_json
+from scripts.collect_distribution_notices import verify_notices
 
 
 def sha(path):
@@ -98,9 +99,11 @@ def publish(stage, proof, targets, record):
     stage = Path(stage).resolve(strict=True)
     proof = json.loads(Path(proof).read_text(encoding='utf-8'))
     allowed = {'Recheck.exe', '_internal', 'environment', 'docs', 'README.md',
-               'requirements-lock.txt'}
+               'requirements-lock.txt', 'LICENSE', 'THIRD_PARTY_NOTICES.md',
+               'licenses', 'third-party-sources'}
     if any(path.name not in allowed for path in stage.iterdir()):
         raise ValueError('Unreviewed files in staging; use a fresh build')
+    verify_notices(stage)
     expected = inventory(stage)
     embedded = json.loads((stage / '_internal/RECHECK_SOURCE_IDENTITY.json').read_text(encoding='utf-8'))
     if (proof.get('status') != 'verified' or proof.get('inventory') != expected

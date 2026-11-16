@@ -1,12 +1,14 @@
 # Recheck
 
-**1.2.1-prototype.1 · Windows x64 데스크톱 프로토타입**
+**1.2.2-prototype.1 · Windows x64 데스크톱 프로토타입**
 
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.
 
-**Windows 실행 ZIP의 공개 배포는 보류합니다.** 기존 프로토타입과 원래 개발 기록은 별도의 비공개 보관 저장소에 보존합니다. 재배포에 필요한 라이선스·고지·소스 제공 자료를 검토하기 전까지 이 공개 저장소에 실행 파일을 올리지 않습니다. GitHub의 Source code ZIP은 실행 배포본이 아닙니다. 아래 사용법과 EXE 검증 기록은 기존 로컬 프로토타입 설명이며 현재 공개 다운로드 제공을 뜻하지 않습니다. [공개 범위](docs/PUBLICATION_SCOPE.md)를 참고하세요.
+**[Windows 배포 ZIP 다운로드](https://github.com/leekmny/Recheck/releases/download/v1.2.2-prototype.1/Recheck-1.2.2-prototype.1-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.2-prototype.1)
+
+ZIP을 풀고 `Recheck` 폴더 안의 **`Recheck.exe`**를 실행합니다. 실행용 Python과 Qt가 포함되어 있어 앱을 켜기 위해 Git이나 Python을 따로 설치할 필요가 없습니다. GitHub의 `Source code` ZIP은 개발용 소스입니다. [처음 실행 안내](docs/FIRST_RUN.md), [바이너리 배포 자료](docs/BINARY_DISTRIBUTION.md)를 참고하세요. 과거 프로토타입과 원래 개발 기록은 비공개 보관 저장소에 보존합니다.
 
 이 공개 저장소는 검토한 소스 스냅샷에서 새 Git 이력으로 시작합니다. 과거 커밋·PR·Actions 기록과 태그는 공개 이력에 포함하지 않습니다. [공개 이력 구성](docs/PUBLIC_HISTORY.md)에 보존 범위와 이후 작업 규칙을 설명합니다.
 
@@ -19,6 +21,7 @@ Recheck는 기존 프로그램과 새로 만든 프로그램에 같은 입력을
 - 프로그램 파일 선택, 테스트 입력 작성·가져오기, 격리 실행과 결과 비교
 - 함수·실행 근거 조회, AI 설명·추가 분석, 보고서와 지난 분석 확인
 - ChatGPT 로그인부터 모델·기능 확인, 기본 AI 저장, 설치된 도구 준비까지 연결
+- 도구 설치·관리: PATH 밖의 설치 위치 확인, 필요한 도구의 WinGet 설치와 공식 다운로드 안내
 - Ollama, OpenAI API, Claude API, Gemini, OpenAI 호환 서버의 연결 설정
 - 배포 환경 자동 가져오기: Java·Ghidra·REA 정적 분석과 프로그램 실행을 별도 컨테이너로 분리
 - 로컬 AI 원클릭 준비: Ollama CPU 실행 환경과 Qwen3 4B Instruct 다운로드·응답 확인·선택
@@ -27,10 +30,10 @@ Linux x86-64 ELF 콘솔 프로그램의 실행 비교를 지원합니다. Window
 
 ## 앱 사용하기
 
-Windows 배포 ZIP을 풀고 **Recheck 폴더 전체와 `environment` 폴더를 유지한 채 `Recheck.exe`**를 실행하세요. 배포본에는 Python·Qt와 검증된 분석 이미지가 포함됩니다. 호스트에는 Linux 컨테이너를 실행할 수 있는 Docker Desktop·WSL 2가 필요합니다. Java·Ghidra·REA·MCP 주소는 직접 설정하지 않아도 됩니다. GPT 연결에는 인터넷이 필요합니다.
+Windows 배포 ZIP을 풀고 **Recheck 폴더 전체를 유지한 채 `Recheck.exe`**를 실행하세요. `_internal` 폴더에는 실행용 Python·Qt와 앱 리소스가 있습니다. 분석에 필요한 Docker 이미지는 처음 준비할 때 인터넷에서 구성합니다. 프로그램 실행 비교에는 Linux 컨테이너를 실행할 수 있는 Docker Desktop·WSL 2가 필요합니다. GPT 연결에도 인터넷이 필요합니다.
 
 1. **시작하기**에서 **ChatGPT로 연결하고 자동 설정**을 누르고 브라우저에서 승인합니다. 다른 AI는 세부 설정에서 선택할 수 있습니다.
-2. 함께 제공된 환경을 자동으로 가져옵니다. Docker가 꺼져 있거나 설치되지 않았다면 시작 화면의 안내를 따라 준비한 뒤 **도구 자동 준비**를 다시 누릅니다.
+2. **도구 설치·관리 → 도구 확인**에서 필요한 도구를 선택해 설치합니다. Docker Desktop을 실행한 뒤 **분석 도구 내려받아 준비**를 누릅니다. 최초 준비에는 인터넷과 수 GB의 디스크 공간이 필요합니다. Java·Ghidra·REA는 이 분석 환경 안에 준비됩니다. 이미지를 빌드하거나 설치하는 작업은 해당 버튼을 눌렀을 때만 시작합니다.
 3. **프로그램 비교**에서 기존 프로그램과 새 프로그램을 선택합니다.
 4. 비교할 입력을 등록하고 **비교 시작하기**를 누릅니다.
 5. 실제 출력·종료 코드·불일치 입력을 먼저 확인한 뒤 AI 설명과 보고서를 살펴봅니다.
@@ -41,7 +44,7 @@ AI 인증은 각 PC의 Recheck에서 별도로 연결합니다. GitHub 로그인
 
 ## 소스로 실행하고 수정하기
 
-Windows x64의 PowerShell에서 프로젝트 루트를 작업 폴더로 사용합니다. 프로젝트 메타데이터는 Python 3.11 이상을 요구하며, 현재 배포본의 기록된 빌드 환경은 Python 3.14.8입니다. 의존성은 `requirements-lock.txt`의 고정 버전으로 설치합니다.
+Windows에서 소스 ZIP을 풀었다면 **`Run-Recheck.cmd`**를 실행하세요. 기존 Python 설치를 PATH 밖에서도 찾고, 없으면 설치를 안내한 뒤 프로젝트 전용 환경을 준비합니다. Git은 소스 ZIP 실행에 필요하지 않습니다. 개발할 때는 Python 3.11 이상을 사용하며 의존성은 `requirements-lock.txt`의 고정 버전으로 설치합니다. 수동 실행은 다음과 같습니다.
 
 ```powershell
 python -m venv .venv
@@ -69,7 +72,7 @@ python -m venv .venv
 
 ## Windows 배포본 빌드
 
-배포 담당자가 이미지를 빌드·검증한 뒤 오프라인 파일과 manifest를 함께 생성합니다. 앱의 도구 자동 준비는 Dockerfile을 빌드하지 않습니다.
+공개 Windows ZIP은 실행 가능한 앱과 고지·대응 소스 자료를 포함하고, 분석용 Docker 이미지는 사용자가 앱에서 처음 준비합니다. 배포 담당자가 별도 오프라인 환경을 만들 때만 다음 개발 명령을 사용합니다. 오프라인 이미지에는 자체 재배포 검토가 필요합니다.
 
 ```powershell
 .venv\Scripts\python scripts\build_managed_images.py --help
@@ -80,12 +83,14 @@ python -m venv .venv
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-이 스크립트는 전체 pytest와 Node 정규화 검사를 실행하고, 검사 전후 소스가 같을 때만 `RECHECK_SOURCE_IDENTITY.json`을 갱신합니다. PyInstaller는 새 staging 폴더에 빌드하며 현재 실행 폴더를 바꾸지 않습니다. manifest로 검증한 오프라인 이미지와 선별 문서를 함께 준비합니다.
+공개 앱 빌드는 `scripts/verify_source.py --output <새 검사 폴더>`를 실행한 뒤 `scripts/package_verified.py --output <새 패키지 폴더> --app-only`로 만듭니다. 전체 pytest와 Node 정규화 검사가 통과하고 검사 전후 소스가 같을 때만 `RECHECK_SOURCE_IDENTITY.json`을 갱신합니다. PyInstaller는 새 staging 폴더에 빌드하며 현재 실행 폴더를 바꾸지 않습니다. 실제 EXE와 ZIP도 별도로 확인합니다.
 
 정식 출력은 `dist/Recheck`입니다. 실제 EXE 검사 후 `release_distribution.py`로 정식 출력과 외부 사용자 폴더를 함께 교체합니다. 이전 폴더 전체를 보존하고 ZIP까지 모든 파일 해시를 대조하며, 중단 시 journal로 복구합니다. ZIP은 실행 폴더 밖에 둡니다. 상세 명령과 제한은 [배포·복구 안내](docs/DISTRIBUTION_AND_RECOVERY.md)를 따르세요. clone·commit·push만으로 EXE가 갱신되지는 않습니다.
 
 ## GitHub에서 이어서 개발하기
 
-소스와 선별 문서는 열람할 수 있으며 수정 권한은 관리자와 초대한 Collaborator에게만 부여합니다. 변경은 브랜치·PR·검사를 거칩니다. 실제 분석 원본·인증 정보·개인 QA·VM·모델은 각 PC에 남깁니다. 문제 제보에는 [보안 안내](SECURITY.md)를 따르세요. 실행 파일은 재배포 자료 검토가 끝난 새 버전부터 별도로 공개합니다.
+소스와 선별 문서는 열람할 수 있으며 수정 권한은 관리자와 초대한 Collaborator에게만 부여합니다. 변경은 브랜치·PR·검사를 거칩니다. 실제 분석 원본·인증 정보·개인 QA·VM·모델은 각 PC에 남깁니다. 문제 제보에는 [보안 안내](SECURITY.md)를 따르세요. 실행 파일은 검사한 버전별 릴리즈 ZIP으로 제공합니다.
 
 자세한 협업·검사·배포 절차는 [GitHub 작업 안내](docs/GITHUB_WORKFLOW.md)를 참고하세요. 중단 지점, REA 기능별 구현 범위와 남은 일은 [프로젝트 상태](docs/PROJECT_STATUS.md)에 정리했습니다.
+
+실행 ZIP은 **Releases**에서 제공합니다. **Packages**는 Docker 이미지·개발용 의존성을 위한 별도 레지스트리이며 현재 사용하지 않습니다. `No packages published`는 실행 ZIP이 없다는 뜻이 아닙니다.

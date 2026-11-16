@@ -12,3 +12,7 @@ libraries, images and other materials retain their respective copyright
 notices and licenses. This notice does not restrict rights granted under those
 licenses, including any applicable rights to source code or replacement of
 third-party libraries. See THIRD_PARTY_NOTICES.md.
+
+For distributions combined with LGPL libraries, recipients may modify or
+replace those libraries and reverse engineer Recheck solely to debug such
+library modifications. No term of this notice restricts those LGPL rights.

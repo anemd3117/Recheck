@@ -147,3 +147,19 @@ def test_failed_save_does_not_start_environment_check(window, monkeypatch):
     monkeypatch.setattr(widget, 'check_environment', lambda: checked.append(True))
     widget.save_and_check_environment()
     assert checked == []
+
+
+def test_first_use_missing_images_opens_installation_instead_of_repeating_import(window, monkeypatch):
+    widget, _ = window
+    widget.environment_done({
+        'ollama': {'connected': False},
+        'docker': {'ready': False, 'engine_ready': True},
+        'ghidra': {'ready': False},
+    })
+    widget._ai_ready = True
+    opened, imported = [], []
+    monkeypatch.setattr(widget, 'open_tool_installation', lambda: opened.append(True))
+    monkeypatch.setattr(widget, 'find_setup', lambda **kwargs: imported.append(kwargs))
+    widget.follow_next_step()
+    assert opened == [True]
+    assert imported == []

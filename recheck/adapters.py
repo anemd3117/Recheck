@@ -18,6 +18,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .process import run_process
 from .models import atomic_json, TestCase
+from .paths import filesystem_path, plain_local_path
 
 
 def resource_root():
@@ -292,37 +293,37 @@ class DockerAdapter:
             }
         if target_os not in self.images:
             raise ValueError("Unsupported OS")
-        binary = Path(binary).resolve(strict=True)
-        work = Path(workspace).resolve()
-        work.mkdir(parents=True, exist_ok=True)
+        binary = plain_local_path(filesystem_path(binary).resolve(strict=True))
+        work = plain_local_path(filesystem_path(workspace).resolve())
+        filesystem_path(work).mkdir(parents=True, exist_ok=True)
         stage = work / ("input-" + uuid.uuid4().hex)
-        stage.mkdir()
+        filesystem_path(stage).mkdir()
         filename = "target.exe" if target_os == "windows" else "target"
-        shutil.copy2(binary, stage / filename)
+        shutil.copy2(filesystem_path(binary), filesystem_path(stage / filename))
         try:
-            (stage / filename).chmod(0o555)
+            filesystem_path(stage / filename).chmod(0o555)
         except OSError:
             pass
         aux_record = []
         for item in test.get("auxiliary_files", test.get("aux_files", [])):
-            original_source = Path(item if isinstance(item, str) else item["source"])
-            if original_source.is_symlink():
+            original_source = plain_local_path(item if isinstance(item, str) else item["source"])
+            if filesystem_path(original_source).is_symlink():
                 raise ValueError("보조 파일 심볼릭 링크는 지원하지 않습니다.")
-            source = original_source.resolve(strict=True)
+            source = plain_local_path(filesystem_path(original_source).resolve(strict=True))
             name = source.name if isinstance(item, str) else item.get("name", source.name)
             if (
-                source.is_symlink()
-                or not source.is_file()
+                filesystem_path(source).is_symlink()
+                or not filesystem_path(source).is_file()
                 or Path(name).name != name
                 or name in {filename, ".", ".."}
                 or any(c in name for c in '/\\:\0')
             ):
                 raise ValueError("보조 파일은 충돌 없는 단일 파일명으로 등록해야 합니다.")
-            if (stage / name).exists():
+            if filesystem_path(stage / name).exists():
                 raise ValueError("중복 보조 파일명")
-            shutil.copy2(source, stage / name)
+            shutil.copy2(filesystem_path(source), filesystem_path(stage / name))
             aux_record.append(
-                {"name": name, "sha256": hashlib.sha256(source.read_bytes()).hexdigest()}
+                {"name": name, "sha256": hashlib.sha256(filesystem_path(source).read_bytes()).hexdigest()}
             )
         # Docker --mount uses CSV; quote source paths containing commas.
         # Preserve run-local artifacts; Docker Desktop may reject execution behind
@@ -332,7 +333,7 @@ class DockerAdapter:
             staging_root = Path(tempfile.gettempdir()) / "Recheck-staging"
             staging_root.mkdir(parents=True, exist_ok=True)
             short_stage = Path(tempfile.mkdtemp(prefix="input-", dir=staging_root)).resolve()
-            shutil.copytree(stage, short_stage, dirs_exist_ok=True)
+            shutil.copytree(filesystem_path(stage), short_stage, dirs_exist_ok=True)
         mount_source = str(short_stage or stage)
         if any(c in mount_source for c in '\r\n"'):
             raise ValueError("Docker 입력 경로에 지원하지 않는 문자가 있습니다.")
@@ -439,7 +440,7 @@ class DockerAdapter:
             cancelled=False,
             truncated=False,
         )
-        result["binary_sha256"] = hashlib.sha256((stage / filename).read_bytes()).hexdigest()
+        result["binary_sha256"] = hashlib.sha256(filesystem_path(stage / filename).read_bytes()).hexdigest()
         result["input_staging"] = dict(
             artifact=str(stage), mount_source=mount_source, short_path_mirror=bool(short_stage)
         )
@@ -589,11 +590,11 @@ class DockerAdapter:
     def _persist(path, data):
         try:
             temporary = path.with_suffix(".json.tmp")
-            with temporary.open("w", encoding="utf-8") as stream:
+            with filesystem_path(temporary).open("w", encoding="utf-8") as stream:
                 json.dump(data, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, path)
+            os.replace(filesystem_path(temporary), filesystem_path(path))
         except OSError as exc:
             # Cleanup must proceed even if disk/database storage is unavailable.
             data.setdefault("storage_errors", []).append(str(exc))

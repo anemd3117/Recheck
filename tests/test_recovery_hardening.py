@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 import pytest
 from recheck.adapters import DockerAdapter, GhidraAdapter
@@ -139,7 +140,7 @@ def test_cache_requires_valid_artifact_and_all_analysis_inputs(tmp_path, monkeyp
         ('application explicitly returned code 126\n', True),
     ],
 )
-def test_launcher_failure_is_not_a_valid_program_exit(tmp_path, message, expected):
+def test_launcher_failure_is_not_a_valid_program_exit(tmp_path, monkeypatch, message, expected):
     binary = tmp_path / 'target'
     binary.write_bytes(b'fixture')
     adapter = DockerAdapter(cli='docker')
@@ -167,11 +168,51 @@ def test_launcher_failure_is_not_a_valid_program_exit(tmp_path, message, expecte
 
     adapter.probe, adapter.call = probe, call
     work = tmp_path / ('long-evidence-' * 12) / ('nested-attempt-' * 4)
-    result = asyncio.run(adapter.execute(binary, {}, 'run', 'a', work))
+    from windows_path_support import legacy_windows_io
+    with legacy_windows_io(monkeypatch):
+        result = asyncio.run(adapter.execute(binary, {}, 'run', 'a', work))
     assert result['infrastructure_ok'] is expected
     assert result['input_staging']['short_path_mirror']
     assert result['input_staging']['mirror_removed']
     assert not Path(result['input_staging']['mount_source']).exists()
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows long input paths')
+def test_execution_long_inputs_and_auxiliary_file_preserve_normal_tool_paths(tmp_path, monkeypatch):
+    from recheck.paths import filesystem_path
+    from windows_path_support import legacy_windows_io
+
+    source = tmp_path / ('input-folder-' * 10) / ('nested-input-' * 8)
+    filesystem_path(source).mkdir(parents=True)
+    binary, auxiliary = source / 'target', source / 'data.txt'
+    filesystem_path(binary).write_bytes(b'fixture')
+    filesystem_path(auxiliary).write_bytes(b'auxiliary fixture')
+    assert len(str(binary)) > 260
+    adapter = DockerAdapter(cli='docker')
+    calls = []
+
+    async def probe():
+        return dict(ready=True, os='linux', arch='amd64', local_endpoint=True)
+
+    async def call(*args, **kwargs):
+        calls.append(args)
+        if args[0] == 'inspect':
+            return process(json.dumps([dict(State=dict(Status='exited', ExitCode=0,
+                                                       OOMKilled=False, Error=''), Image='i')]))
+        return process('id' if args[0] == 'create' else '')
+
+    adapter.probe, adapter.call = probe, call
+    work = tmp_path / ('evidence-folder-' * 10) / ('nested-attempt-' * 6)
+    with legacy_windows_io(monkeypatch):
+        result = asyncio.run(adapter.execute(binary, {'aux_files': [str(auxiliary)]},
+                                             'run', 'a', work))
+    assert result['status'] == 'success' and result['infrastructure_ok']
+    assert not result.get('storage_errors')
+    assert result['actual_input']['auxiliary_files'][0]['name'] == 'data.txt'
+    assert all('\\\\?\\' not in str(argument) for call in calls for argument in call)
+    sidecar = work / (result['container_name'] + '.json')
+    persisted = json.loads(filesystem_path(sidecar).read_text(encoding='utf-8'))
+    assert persisted['infrastructure_ok'] and persisted['input_staging']['mirror_removed']
 
 
 def test_timeout_diagnosis_does_not_confuse_memory_setting_with_oom(tmp_path):

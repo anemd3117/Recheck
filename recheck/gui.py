@@ -324,6 +324,7 @@ class MainWindow(QMainWindow):
         body.addWidget(self.pages, 1)
         outer.addLayout(body, 1)
         self.navigation.currentRowChanged.connect(self.select_page)
+        self.navigation.selectionModel().selectionChanged.connect(self.select_navigation_item)
         self.navigation.setCurrentRow(0)
         self.statusBar().showMessage("분석 결과와 작업 기록은 자동으로 저장됩니다.")
         self.statusBar().setToolTip(f"기록 위치: {getattr(self.engine.store, 'root', '')}")
@@ -361,6 +362,14 @@ class MainWindow(QMainWindow):
             self.banner.hide()
         if index == 3:
             self.refresh_history()
+
+    def select_navigation_item(self, selected, _deselected):
+        # Accessibility clients may select an item without changing the current row.
+        indexes = selected.indexes()
+        if indexes:
+            row = indexes[0].row()
+            if self.navigation.currentRow() != row:
+                self.navigation.setCurrentRow(row)
 
     def detail_section(self, title, widget):
         frame = QWidget()
@@ -430,6 +439,7 @@ class MainWindow(QMainWindow):
         help_text.setWordWrap(True)
         sb.addWidget(help_text, 1)
         self.setup_shortcut = self.button('설치된 도구 자동 찾기', self.find_setup, sb)
+        self.tool_install_shortcut = self.button('도구 설치·관리', self.open_tool_installation, sb)
         self.benchmark_shortcut = self.button(
             '내 PC 벤치마크', self.open_performance_settings, sb, False
         )
@@ -1155,7 +1165,7 @@ class MainWindow(QMainWindow):
                 self.provider_panel.details_toggle.setChecked(True)
                 self.provider_panel.test_capabilities()
         elif action == 'prepare_tools':
-            self.find_setup(auto_apply=True)
+            self.open_tool_installation()
         elif action == 'view_results':
             self.navigation.setCurrentRow(2)
         elif action == 'compare':
@@ -1309,6 +1319,31 @@ class MainWindow(QMainWindow):
         self.navigation.setCurrentRow(5)
         self.settings_tabs.setCurrentIndex(1)
 
+    def open_tool_installation(self):
+        from PySide6.QtWidgets import QDialog
+        from .prerequisite_ui import ToolSetupPanel
+
+        if not hasattr(self, 'tool_setup_dialog'):
+            self.tool_setup_dialog = QDialog(self)
+            self.tool_setup_dialog.setWindowTitle('Recheck · 도구 설치·관리')
+            self.tool_setup_dialog.resize(900, 560)
+            layout = QVBoxLayout(self.tool_setup_dialog)
+            self.tool_setup_panel = ToolSetupPanel(
+                launch=lambda title, work, done: self.launch_task(
+                    title, lambda settings, cancel, emit: work(cancel, emit), done),
+                open_url=self.open_url,
+                settings=self.collect_settings,
+                on_cancel=self.cancel_work,
+                on_prepared=lambda: self.after_current_task(
+                    lambda: self.find_setup(auto_apply=True)),
+                parent=self.tool_setup_dialog,
+            )
+            layout.addWidget(self.tool_setup_panel)
+        self.tool_setup_dialog.show()
+        self.tool_setup_dialog.raise_()
+        self.tool_setup_dialog.activateWindow()
+        self.tool_setup_panel.refresh()
+
     def find_setup(self, *_, auto_apply=False):
         self._auto_prepare_tools = auto_apply
         if self.worker and self.worker.isRunning():
@@ -1317,7 +1352,7 @@ class MainWindow(QMainWindow):
         if auto_apply:
             self.navigation.setCurrentRow(0)
             self.guide_status.setText(
-                '2단계 · 함께 제공된 분석 환경을 준비하고 있습니다. 처음에는 시간이 걸릴 수 있습니다.'
+                '2단계 · 분석 환경을 확인하고 있습니다. 처음 준비는 도구 설치·관리에서 진행할 수 있습니다.'
             )
         else:
             self.navigation.setCurrentRow(5)
@@ -1540,6 +1575,8 @@ class MainWindow(QMainWindow):
             self.performance_panel.set_busy(True)
         if hasattr(self, 'provider_panel'):
             self.provider_panel.set_busy(True)
+        if hasattr(self, 'tool_setup_panel'):
+            self.tool_setup_panel.set_busy(True)
         for control in (*self.setting_fields.values(), self.server_url, self.model_combo):
             control.setEnabled(False)
         for button in self.task_buttons:
@@ -1574,6 +1611,8 @@ class MainWindow(QMainWindow):
             if isinstance(worker, AsyncWorker):
                 worker.work = None
         self._task_join_pending = False
+        if hasattr(self, 'tool_setup_panel'):
+            self.tool_setup_panel.set_busy(False)
         self.cancel_button.setEnabled(False)
         self.cancel_button.hide()
         self.progress.hide()
@@ -1721,13 +1760,13 @@ class MainWindow(QMainWindow):
         missing = []
         if not docker.get('ready'):
             missing.append(
-                '동봉된 실행 환경을 아직 가져오지 않았습니다. 위의 도구 자동 준비를 누르면 배포 파일에서 준비합니다.'
+                '분석 환경을 처음 준비해야 합니다. 도구 설치·관리 → 분석 도구 내려받아 준비를 누르세요.'
                 if docker.get('engine_ready')
-                else '실행 도구(Docker)를 사용할 수 없습니다. 설치하거나 실행한 뒤 도구 자동 준비를 다시 눌러 주세요.'
+                else 'Docker를 사용할 수 없습니다. 도구 설치·관리에서 설치를 도와드립니다. Docker Desktop을 실행한 뒤 분석 도구를 준비하세요.'
             )
         if not ghidra.get('ready'):
             missing.append(
-                '파일 구조 분석 환경이 준비되지 않았습니다. 배포 폴더의 environment 폴더를 확인한 뒤 도구 자동 준비를 다시 눌러 주세요. 직접 설치한 도구는 고급 설정에서 사용할 수 있습니다.'
+                '파일 구조 분석 환경이 준비되지 않았습니다. 도구 설치·관리 → 분석 도구 내려받아 준비를 누르세요. 직접 설치한 도구는 고급 설정에서 사용할 수 있습니다.'
             )
         self.tool_help_text.setText('\n'.join(missing))
         self.tool_help.setVisible(bool(missing))

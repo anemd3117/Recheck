@@ -2,10 +2,12 @@
 
 ## Goal and scope
 
-Keep the Windows application and existing GPT sign-in workflow. Ship an installable,
-versioned Linux analysis environment beside the application so users do not need
-to configure Java, Ghidra, REA, MCP, or tool paths. Rebuild and folder comparison
-are outside this change.
+Keep the Windows application and existing GPT sign-in workflow. The public Windows
+ZIP contains the executable, Python/Qt runtime and reviewed Docker source contexts.
+It does not redistribute the old private Docker archives. Users do not need host
+Git, Python, Java, Ghidra, REA or MCP to launch the executable and prepare the managed
+environment. Docker Desktop and its Linux amd64 engine are still needed for analysis.
+Rebuild and folder comparison are outside this change.
 
 The normal sequence is **connect AI → prepare environment → choose two programs
 → compare → inspect evidence**. GPT remains the default. Ollama is optional and
@@ -30,13 +32,37 @@ starts only when the user selects local AI.
 
 ## Distribution and trust
 
-`resources/runtime/environment.json` identifies each component by exact image ID,
-platform and component label. Offline archives in the distribution's `environment`
-directory also have SHA-256 digests. Preparation verifies archives before loading
-and inspects the loaded image. Registry downloads require explicitly trusted,
-immutable digest references. End-user setup never builds Dockerfiles or resolves
-mutable tags. Images and optional model data are separate from personal settings
-and credentials.
+`resources/runtime/environment.json` retains the exact image identities and archive
+digests of the earlier developer/offline environment. Existing verified offline
+archives remain supported: preparation hashes them before loading, then inspects
+the image. Registry downloads require explicitly trusted immutable digest references.
+Those historical TAR files are not included in the public Windows ZIP.
+
+For the public ZIP, the separate **build analysis environment** setup action downloads
+official upstream components using the shipped Dockerfiles and lockfile, then builds
+the static and execution images locally. This action needs internet access, several
+GB of free space and potentially several minutes. It requires an explicit user
+action; normal probe, comparison and legacy preparation do not build or download
+source environments. Optional Ollama is built only when explicitly requested; no
+model is downloaded or service/container started by the builder.
+
+The builder requires a ready local Linux amd64 Docker endpoint, copies each reviewed
+source context into temporary app-owned staging, hashes every file plus the manifest,
+and checks those hashes before and after building. Docker writes an immutable ID to
+a unique iidfile. The manager checks this exact ID, platform, component, build-contract
+and source-context labels before atomically saving a local receipt under
+`%LOCALAPPDATA%\Recheck\runtime\local-builds.json` (or `RECHECK_DATA_DIR`). The
+shipped manifest is never rewritten and mutable tags grant no trust. A changed
+context/manifest, missing image or invalid receipt prevents that local image from
+being selected; rebuilding is the explicit recovery action. Static and execution
+adapters both use these checked image IDs. A failed/cancelled build leaves a previous
+receipt intact and does not register partial success. Docker may retain intermediate
+build cache; the app does not remove unrelated images or volumes.
+
+Image IDs built on another PC can differ because package repositories and Docker
+build metadata change even when source contexts match. Their locally inspected IDs
+and context hashes are recorded instead of presenting them as the old published
+image IDs. Images, receipts and optional model data remain separate from credentials.
 
 Static and execution images are required. Ollama is not required for GPT. The
 manager probes without making changes; preparation and service start are explicit

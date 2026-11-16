@@ -1,5 +1,6 @@
 """Publication preserves old releases and never promotes untested/partial copies."""
 import importlib
+import hashlib
 import json
 from types import SimpleNamespace
 from pathlib import Path
@@ -17,6 +18,21 @@ def release(tmp_path):
     (stage / '_internal/RECHECK_SOURCE_IDENTITY.json').write_text(
         json.dumps({'aggregate_sha256': 'a' * 64})
     )
+    (stage / 'licenses').mkdir()
+    (stage / 'third-party-sources').mkdir()
+    notice_files = {
+        'LICENSE': b'application rights and LGPL exception',
+        'THIRD_PARTY_NOTICES.md': b'dependency notices',
+        'licenses/REPLACEMENT.md': b'replace compatible shared libraries',
+        'third-party-sources/library.tar.xz': b'corresponding source fixture',
+    }
+    for name, payload in notice_files.items():
+        (stage / name).write_bytes(payload)
+    (stage / 'licenses/manifest.json').write_text(json.dumps({
+        'version': 1, 'sources': [{'component': 'qtbase', 'version': 'fixture'}],
+        'files': [dict(path=name, size_bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+                  for name, payload in notice_files.items()],
+    }))
     proof = tmp_path / 'proof.json'
     proof.write_text(json.dumps({
         'status': 'verified', 'inventory': module.inventory(stage),
@@ -209,5 +225,26 @@ def test_publication_requires_the_literal_observation_gate(release):
     del data['checks']['literal_observations']
     proof.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='verification'):
+        m.publish(stage, proof, targets, record)
+    assert all((target / 'personal.txt').exists() for target in targets)
+
+
+def test_publication_zip_contains_the_verified_application_and_dependency_materials(release):
+    m, stage, proof, targets, record = release
+    result = m.publish(stage, proof, targets, record)
+    import zipfile
+    with zipfile.ZipFile(result['zip']) as archive:
+        assert archive.read('Recheck/Recheck.exe') == b'verified executable'
+        assert archive.read('Recheck/licenses/REPLACEMENT.md') == b'replace compatible shared libraries'
+        assert archive.read('Recheck/third-party-sources/library.tar.xz') == b'corresponding source fixture'
+
+
+def test_native_success_cannot_publish_a_broken_notice_inventory(release):
+    m, stage, proof, targets, record = release
+    (stage / 'licenses/REPLACEMENT.md').write_text('changed after notice checks')
+    data = json.loads(proof.read_text())
+    data['inventory'] = m.inventory(stage)
+    proof.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match='checksum|inventory'):
         m.publish(stage, proof, targets, record)
     assert all((target / 'personal.txt').exists() for target in targets)

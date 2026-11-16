@@ -1,6 +1,6 @@
 # GitHub에서 Recheck 이어서 개발하기
 
-앱 소스의 기준 버전은 1.2.1-prototype.1입니다. 공개 저장소는 검토한 소스 스냅샷에서 새 이력으로 시작하며, 공개 시작 자체가 새 EXE 배포를 뜻하지는 않습니다. 실제 실행·AI 인증·분석 데이터는 각 작업 PC에서 관리합니다. 이전 개발 기록·태그·실행 파일은 별도의 비공개 저장소에 보존합니다. [공개 이력 구성](PUBLIC_HISTORY.md)을 먼저 읽으세요.
+앱 소스의 기준 버전은 1.2.2-prototype.1입니다. 공개 저장소는 검토한 소스 스냅샷에서 새 이력으로 시작했으며, 새 EXE ZIP은 별도 검증 후 Releases에서 제공합니다. 실제 실행·AI 인증·분석 데이터는 각 작업 PC에서 관리합니다. 이전 개발 기록·태그·실행 파일은 별도의 비공개 저장소에 보존합니다. [공개 이력 구성](PUBLIC_HISTORY.md)을 먼저 읽으세요.
 
 ## 저장소와 공동 작업자
 
@@ -9,6 +9,8 @@
 GitHub의 로그인과 Recheck의 AI 로그인은 별개입니다. API 키·OAuth 토큰·로컬 보안 저장소를 공유하지 않고, 각 작업자가 앱에서 자신의 AI 연결을 설정합니다. Windows 사용자에게 결합된 보호 자료를 다른 PC로 복사해 인증을 이전하지 않습니다. 연결 절차는 [AI 연결 안내](AI_CONNECTIONS.md)를 따릅니다.
 
 ## 처음 복제한 PC
+
+앱만 사용하려면 README의 Windows 배포 ZIP을 받아 Recheck.exe를 실행합니다. Git/Python PATH는 필요하지 않습니다. 소스 ZIP은 `Run-Recheck.cmd`로 시작할 수 있습니다. [첫 실행과 도구 설치](FIRST_RUN.md)를 먼저 참고하세요.
 
 GitHub의 **Code**에서 저장소 주소를 복사해 Git 또는 GitHub Desktop으로 복제합니다. 아래 명령은 복제된 Recheck 폴더에서 실행합니다.
 
@@ -19,7 +21,18 @@ python -m venv .venv
 .venv\Scripts\python launch.py
 ```
 
-프로젝트 메타데이터의 Python 요구 버전은 3.11 이상이며, 현재 배포본은 Windows x64·Python 3.14.8 환경에서 빌드한 기록이 있습니다. 실제 비교에는 Ghidra·호환 Java·Docker와 선택한 AI 연결이 필요합니다. 저장소를 복제해도 외부 프로그램이나 모델이 함께 설치되지는 않습니다.
+프로젝트 메타데이터의 Python 요구 버전은 3.11 이상이며 현재 Windows 배포는 Python 3.14.8로 빌드합니다. 비교 기능에는 Docker와 선택한 AI 연결이 필요합니다. Ghidra·Java·REA는 앱의 분석 환경 준비에서 구성하거나 직접 설치 방식으로 연결할 수 있습니다.
+
+## Releases와 Packages 운영 선택
+
+| 항목 | 용도 | Recheck 적용 |
+| --- | --- | --- |
+| Releases | 태그별 배포 설명과 다운로드 자산 | Windows EXE ZIP·고지·대응 소스 자료 배포 |
+| Packages | npm·NuGet 등 의존성 레지스트리와 Docker/OCI 이미지 | 현재 미사용. 검토한 Docker 이미지 배포가 필요해지면 GHCR 별도 검토 |
+
+`No packages published`는 Packages에 게시한 항목이 없다는 안내이며 Releases의 ZIP과 독립적입니다. 사용자는 ZIP을 풀고 EXE를 실행하므로 이번 배포는 Releases를 사용합니다. Packages를 채우기 위해 같은 ZIP을 올리지 않습니다. Docker 이미지는 당장 공개하지 않고 각 PC에서 앱의 명시적 준비 작업으로 구성합니다. 향후 GHCR을 사용하려면 이미지의 재배포 자료·고정 digest·패키지 공개 설정과 권한을 별도 검증합니다.
+
+프로토타입은 prerelease이므로 README는 `/releases/latest`가 아닌 정확한 태그와 ZIP 링크를 사용합니다. 공식 근거: [Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases), [Packages](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages), [Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry), [Latest release 규칙](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).
 
 ## 수정부터 push까지
 
@@ -74,7 +87,7 @@ clone·commit·push는 실행 파일을 다시 만들지 않습니다. 자동 �
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-전체 pytest와 Node 검사를 통과하고 검사 전후 입력 파일이 같을 때 소스 식별자를 갱신합니다. 빌드는 새 staging에 생성하며 현재 사용자 EXE는 교체하지 않습니다. 동봉 이미지 manifest·해시·크기를 검증하고 선별한 문서만 복사합니다. 실제 Windows EXE와 frozen CLI 검사 후 정식 `dist/Recheck`와 외부 사용자 폴더를 동일 파일로 반영합니다. 실패·중단 시 이전 폴더를 복원하며, ZIP과 전체 inventory도 대조합니다. 정확한 명령·복구 절차·지원 한계는 [배포·복구 안내](DISTRIBUTION_AND_RECOVERY.md)를 따르세요.
+전체 pytest와 Node 검사를 통과하고 검사 전후 입력 파일이 같을 때 소스 식별자를 갱신합니다. 빌드는 새 staging에 생성하며 현재 사용자 EXE는 교체하지 않습니다. 기본 공개 빌드는 Recheck.exe·실행용 Python/Qt·고지·대응 소스와 선별 문서를 준비하고 Docker TAR는 제외합니다. 실제 Windows EXE와 frozen CLI 검사 후 정식 `dist/Recheck`와 외부 사용자 폴더를 동일 파일로 반영합니다. 실패·중단 시 이전 폴더를 복원하며 ZIP과 전체 inventory도 대조합니다. 정확한 명령·복구 절차·지원 한계는 [배포·복구 안내](DISTRIBUTION_AND_RECOVERY.md)를 따르세요.
 
 ## PR·릴리스 설명에 남길 내용
 
@@ -87,4 +100,4 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 원격 저장소가 정확히 `leekmny/Recheck`인지와 현재 visibility를 확인합니다. 공개 전환은 별도 사용자 요청에 따른 관리 작업이며 일반 배포 명령이 공개 범위·Collaborator 권한을 변경하지 않습니다. 관리 스크립트는 공개·비공개 모두에서 정확한 저장소 identity와 일관된 visibility를 요구합니다. 개인 계정·키·토큰·보안 저장소·실제 분석 이력·VM·모델은 올리지 않습니다. QA 원본 대신 필요한 설계와 집계·재현 방법만 검토 가능한 문서로 공유합니다.
 
-검증한 변경은 작업 브랜치와 PR로 남기고 정확한 head SHA의 CI 성공을 확인합니다. 병합 시에도 검토한 SHA가 그대로인지 확인합니다. 새 버전 태그와 draft prerelease를 사용하고, 이전 태그·첨부 파일을 덮어쓰지 않습니다. 실행 ZIP의 공개는 [공개 정책](PUBLICATION_SCOPE.md)에 따라 보류합니다. 재배포 고지·소스 제공 조건의 검토를 마친 새 버전만 서버 ZIP 크기·SHA-256을 로컬과 대조한 뒤 게시합니다. 명령에는 `--branch <검토한 브랜치>`와 `--tag <새 태그>`를 명시하세요. 최종 릴리스 페이지·commit·첨부 자산·CI·본문 링크를 다시 읽어 확인합니다. Source code ZIP은 Windows 실행 배포 ZIP과 다릅니다.
+검증한 변경은 작업 브랜치와 PR로 남기고 정확한 head SHA의 CI 성공을 확인합니다. 병합 시에도 검토한 SHA가 그대로인지 확인합니다. 새 버전 태그와 draft prerelease를 사용하고 이전 태그·첨부 파일을 덮어쓰지 않습니다. [공개 정책](PUBLICATION_SCOPE.md)에 따라 재배포 고지·소스 제공 자료와 실제 실행 검증을 갖춘 새 버전만 서버 ZIP 크기·SHA-256을 로컬과 대조한 뒤 게시합니다. 명령에는 `--branch <검토한 브랜치>`와 `--tag <새 태그>`를 명시하세요. 최종 릴리스 페이지·commit·첨부 자산·CI·본문 링크를 다시 읽어 확인합니다. Source code ZIP은 Windows 실행 배포 ZIP과 다릅니다.

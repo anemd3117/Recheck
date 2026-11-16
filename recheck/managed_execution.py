@@ -56,7 +56,8 @@ class ManagedExecutionAdapter(DockerAdapter):
                 or engine.get('arch') not in ('amd64', 'x86_64')
             ):
                 raise ValueError('A local Linux amd64 Docker engine is required')
-            manifest = _read_json(self.resources / 'runtime/environment.json')
+            resolve = getattr(self.runtime, 'image_specifications', None)
+            manifest = resolve() if resolve else _read_json(self.resources / 'runtime/environment.json')
             specification = manifest['images']['execution']
             image_id = specification.get('image_id')
             if (
@@ -91,7 +92,7 @@ class ManagedExecutionAdapter(DockerAdapter):
                 on_event,
                 stage='image',
                 status='ready',
-                message='Verified packaged execution image ready',
+                message='Verified analysis execution image ready',
             )
             return dict(
                 status='success',
@@ -103,7 +104,7 @@ class ManagedExecutionAdapter(DockerAdapter):
                 build=None,
                 reused=True,
                 environment=environment,
-                network_usage='Packaged image; target execution uses network=none',
+                network_usage='Verified image; target execution uses network=none',
             )
         except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
             return dict(

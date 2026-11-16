@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from ai_providers.contracts import ProviderProfile
+from .paths import filesystem_path
 
 SCHEMA_VERSION = '1.0'
 STATES = ('pending', 'running', 'success', 'partial', 'failed', 'cancelled', 'blocked')
@@ -98,6 +99,7 @@ def load_settings(root=None) -> Settings:
 
 
 def atomic_json(path: Path, value: Any):
+    path = filesystem_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
     with temp.open('w', encoding='utf-8') as stream:
