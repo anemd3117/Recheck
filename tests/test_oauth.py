@@ -6,6 +6,7 @@ import importlib
 import json
 import threading
 import time
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -289,19 +290,32 @@ def test_wrong_callback_host_path_state_and_duplicate_query_are_ignored_before_v
 
 
 @pytest.mark.parametrize('action', ['cancel', 'timeout', 'access_denied', 'missing_dynamic_id'])
-def test_cancel_timeout_denial_and_incomplete_registration_never_exchange_code(tmp_path, action):
+def test_cancel_timeout_denial_and_incomplete_registration_never_exchange_code(
+    tmp_path, monkeypatch, action
+):
     async def scenario():
         fixture = ProviderFixture()
         oauth, _ = service(tmp_path, fixture)
         cancel = threading.Event()
         callback_uri = []
+        callback_ready = asyncio.Event()
+        # This test covers failures after a real listener opens. Startup latency
+        # must not consume its tiny deadline; the timeout case advances the OAuth
+        # clock explicitly. asyncio's real clock still bounds a stalled test.
+        clock = [1000.0]
+        monkeypatch.setattr(
+            module(), 'time', SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
+        )
 
         async def callback(url):
             fixture.auth = parse_qs(urlsplit(url).query)
             base = fixture.auth['redirect_uri'][0]
             callback_uri.append(base)
+            callback_ready.set()
             if action == 'cancel':
                 cancel.set()
+            elif action == 'timeout':
+                clock[0] += 1
             elif action in ('access_denied', 'missing_dynamic_id'):
                 params = {'state': fixture.auth['state'][0]}
                 if action == 'access_denied':
@@ -309,22 +323,30 @@ def test_cancel_timeout_denial_and_incomplete_registration_never_exchange_code(t
                 else:
                     params['code'] = 'fixture-code'
                 async with httpx.AsyncClient(trust_env=False) as client:
-                    await client.get(base, params=params)
+                    response = await client.get(base, params=params)
+                assert response.status_code == (200 if action == 'access_denied' else 400)
                 if action == 'missing_dynamic_id':
                     cancel.set()
 
         with pytest.raises(module().AuthError) as raised:
-            await oauth.login(
-                'chatgpt',
-                'profile-a',
-                module().OAuthConfig(timeout=0.12),
-                cancel=cancel,
-                on_url=callback,
+            await asyncio.wait_for(
+                oauth.login(
+                    'chatgpt',
+                    'profile-a',
+                    module().OAuthConfig(timeout=0.12),
+                    cancel=cancel,
+                    on_url=callback,
+                ),
+                timeout=5,
             )
-        assert (
-            raised.value.code in ('cancelled', 'oauth_timeout', 'access_denied')
-            and fixture.token_calls == 0
-        )
+        assert callback_ready.is_set() and len(callback_uri) == 1
+        assert raised.value.code == {
+            'cancel': 'cancelled',
+            'timeout': 'oauth_timeout',
+            'access_denied': 'access_denied',
+            'missing_dynamic_id': 'cancelled',
+        }[action]
+        assert fixture.token_calls == 0
         assert not list(tmp_path.glob('cred_*.json'))
         async with httpx.AsyncClient(trust_env=False, timeout=0.1) as client:
             with pytest.raises((httpx.ConnectError, httpx.ConnectTimeout)):
