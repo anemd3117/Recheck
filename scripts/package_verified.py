@@ -17,6 +17,7 @@ from scripts.collect_distribution_notices import collect_notices, fetch_sources,
 
 ROOT = Path(__file__).resolve().parents[1]
 CURATED_DOCS = (
+    'ANALYSIS_MODES.md',
     'AI_CONNECTIONS.md',
     'AI_AUTH_STATUS.md',
     'UX_UPGRADE_20261115.md',

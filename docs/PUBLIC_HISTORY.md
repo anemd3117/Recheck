@@ -20,8 +20,8 @@
 
 공개 이력 시작점의 소스 버전은 1.2.1-prototype.1이었으며, 그 작업 자체는 새 EXE
 배포가 아니었습니다. 이후의 Windows 배포는 검토한 소스와 실제 실행 검증을 기준으로
-새 공개 태그·Releases에 분리합니다. 현재 소스 1.2.3-prototype.1의 배포 경로는
-[해당 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v1.2.3-prototype.1)입니다.
+새 공개 태그·Releases에 분리합니다. 현재 소스 1.2.4-prototype.1의 배포 경로는
+[해당 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v1.2.4-prototype.1)입니다.
 과거 비공개 EXE의 원본 소스는 보관본의 해당 태그와 embedded source identity가
 기준이며, 새 공개 버전의 자산과 혼동하지 않습니다.
 

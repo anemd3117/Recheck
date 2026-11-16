@@ -157,7 +157,10 @@ class Engine:
             sha256=run.get('files', {}).get(target, {}).get('sha256', ''),
         )
 
-    async def environment(self, cancel=None):
+    async def environment(self, cancel=None, *, analysis_mode='both', include_ai=True):
+        if analysis_mode not in ('static', 'dynamic', 'both'):
+            raise ValueError('지원하지 않는 분석 범위')
+
         async def safe(coro):
             try:
                 return await coro
@@ -168,23 +171,34 @@ class Engine:
 
         client = None
         client_error = None
-        try:
-            client = self._client()
-        except (ProviderError, ValueError) as exc:
-            client_error = dict(
-                status='failed', error=str(exc), code=getattr(exc, 'code', 'profile_configuration')
-            )
+        if include_ai:
+            try:
+                client = self._client()
+            except (ProviderError, ValueError) as exc:
+                client_error = dict(
+                    status='failed', error=str(exc), code=getattr(exc, 'code', 'profile_configuration')
+                )
         try:
 
             async def provider_probe():
+                if not include_ai:
+                    return dict(status='not_requested', connected=False)
                 return client_error if client is None else await safe(client.probe(cancel))
 
-            docker_adapter = self._docker()
+            async def omitted():
+                return dict(status='not_requested', ready=False)
+
+            needs_docker = analysis_mode != 'static' or self.settings.static_backend != 'direct'
+            docker_adapter = self._docker() if needs_docker else None
             ollama, docker, ghidra = await asyncio.gather(
-                provider_probe(), safe(docker_adapter.probe()), safe(self._ghidra().probe())
+                provider_probe(),
+                safe(docker_adapter.probe()) if docker_adapter is not None else omitted(),
+                safe(self._ghidra().probe()) if analysis_mode != 'dynamic' else omitted(),
             )
             ai = dict(ollama)
             try:
+                if not include_ai:
+                    raise ValueError('AI 설명 미선택')
                 profile = self._selected_profile()
                 ai.update(
                     provider=profile.provider,
@@ -196,7 +210,8 @@ class Engine:
                 if profile.provider != 'ollama' and client is not None:
                     ollama = dict(connected=False, status='not_selected', provider='ollama')
             except (ProviderError, ValueError):
-                ai.update(provider='unknown', status='profile_configuration')
+                if include_ai:
+                    ai.update(provider='unknown', status='profile_configuration')
             from .managed_execution import ManagedExecutionAdapter
 
             if isinstance(docker_adapter, ManagedExecutionAdapter) and docker.get('ready'):
@@ -282,14 +297,37 @@ class Engine:
             self._stage(run, name, 'cancelled' if cancelled(cancel) else 'failed', reason=str(exc))
             return None
 
-    async def analyze(self, original, reimplementation, tests, mode='automatic', cancel=None):
+    @staticmethod
+    def _analysis_mode(run):
+        mode = run.get('mode', 'automatic')
+        return run.get('analysis_mode') or (
+            mode if mode in ('static', 'dynamic') else 'both'
+        )
+
+    def _ai_mode(self, run):
+        if 'ai_mode' in run:
+            return run['ai_mode']
+        mode = run.get('mode', 'automatic')
+        if mode == 'agent':
+            return 'agent'
+        return 'explain' if mode == 'automatic' and self._llm_requested() else 'off'
+
+    async def analyze(self, original, reimplementation, tests, mode='automatic', cancel=None,
+                      *, analysis_mode=None, ai_mode=None):
         if not self._lock.acquire(blocking=False):
             raise RuntimeError('이미 작업 중입니다')
         try:
             self._begin_workflow()
-            validated = validate_tests(tests)
             if mode not in ('automatic', 'agent', 'static', 'dynamic'):
                 raise ValueError('지원하지 않는 분석 모드')
+            legacy = dict(mode=mode)
+            analysis_mode = self._analysis_mode(legacy) if analysis_mode is None else analysis_mode
+            ai_mode = self._ai_mode(legacy) if ai_mode is None else ai_mode
+            if analysis_mode not in ('static', 'dynamic', 'both'):
+                raise ValueError('지원하지 않는 분석 범위')
+            if ai_mode not in ('off', 'explain', 'agent'):
+                raise ValueError('지원하지 않는 AI 설명 방식')
+            validated = [] if analysis_mode == 'static' and tests == [] else validate_tests(tests)
             run = dict(
                 schema_version='1.0',
                 run_id=new_id('run'),
@@ -297,6 +335,8 @@ class Engine:
                 status='running',
                 created=now(),
                 mode=mode,
+                analysis_mode=analysis_mode,
+                ai_mode=ai_mode,
                 owner_process=dict(pid=os.getpid(), create_time=psutil.Process().create_time()),
                 files={},
                 tests=[x.model_dump() for x in validated],
@@ -337,14 +377,17 @@ class Engine:
             self._lock.release()
 
     async def _pipeline(self, run, original, reimplementation, cancel):
+        analysis_mode = self._analysis_mode(run)
+        ai_mode = self._ai_mode(run)
+
         async def metadata():
             for target, path in [('original', original), ('reimplementation', reimplementation)]:
                 info = await asyncio.to_thread(inspect_binary, path)
                 run['files'][target] = info
                 self._evidence(run, 'file_metadata', target, info, source=info['path'])
-                capability = 'execution_supported' if run['mode'] == 'dynamic' else 'static_supported'
+                capability = 'execution_supported' if analysis_mode == 'dynamic' else 'static_supported'
                 if not info.get(capability, info['supported']):
-                    reason = 'execution_reason' if run['mode'] == 'dynamic' else 'static_reason'
+                    reason = 'execution_reason' if analysis_mode == 'dynamic' else 'static_reason'
                     raise ValueError(info.get(reason, info['reason']))
                 # Freeze the exact bytes used by both adapters. Every retry verifies source hashes anew.
                 dest = self.store.run_dir(run['run_id']) / 'inputs' / target / info['name']
@@ -379,14 +422,16 @@ class Engine:
             return self._finish(run, cancel)
 
         async def environment():
-            run['environment'] = await self.environment(cancel)
+            run['environment'] = await self.environment(
+                cancel, analysis_mode=analysis_mode, include_ai=ai_mode != 'off'
+            )
             self._evidence(
                 run, 'environment', 'both', run['environment'], source='environment probe'
             )
             return dict(status='success')
 
         await self._step(run, 'environment', environment, cancel)
-        if run['mode'] != 'dynamic':
+        if analysis_mode != 'dynamic':
             for target in ('original', 'reimplementation'):
                 await self._step(
                     run,
@@ -413,7 +458,7 @@ class Engine:
         else:
             for key in ('static_original', 'static_reimplementation', 'structure'):
                 self._stage(run, key, 'blocked', reason='사용자 선택: 동적 분석만')
-        if run['mode'] != 'static':
+        if analysis_mode != 'static':
             await self._step(run, 'image', lambda: self._image(run, cancel), cancel)
             if run['stages']['image']['status'] == 'success':
                 await self._step(
@@ -432,17 +477,19 @@ class Engine:
         else:
             for key in ('image', 'dynamic'):
                 self._stage(run, key, 'blocked', reason='사용자 선택: 정적 분석만')
-        if run['mode'] in ('automatic', 'agent') and self._llm_requested():
+        if ai_mode != 'off':
             await self._step(run, 'llm', lambda: self._interpret(run, cancel), cancel)
         else:
             self._stage(run, 'llm', 'blocked', reason='모델 미선택 또는 선택 분석 모드')
-        if run['mode'] == 'agent':
+        if ai_mode == 'agent':
             await self._step(run, 'agent', lambda: self._agent(run, cancel), cancel)
         else:
             self._stage(run, 'agent', 'blocked', reason='자동 분석 모드')
         self._finish(run, cancel)
 
     async def _static(self, run, target, cancel):
+        if self._analysis_mode(run) == 'dynamic':
+            raise ValueError('동적 분석만 선택한 작업에서 정적 분석을 실행할 수 없습니다')
         result = await self._ghidra().analyze(
             Path(run['files'][target]['snapshot']),
             self.store.run_dir(run['run_id']) / run['attempt_id'] / target,
@@ -511,6 +558,8 @@ class Engine:
         return result
 
     async def _image(self, run, cancel):
+        if self._analysis_mode(run) == 'static':
+            raise ValueError('정적 분석만 선택한 작업에서 실행 환경을 준비할 수 없습니다')
         # A native artifact can be statically comparable without being a console
         # executable. Check here too because retries and agent actions share this
         # entry point with the automatic pipeline.
@@ -542,6 +591,8 @@ class Engine:
         return result
 
     async def _dynamic(self, run, test_ids, cancel):
+        if self._analysis_mode(run) == 'static':
+            raise ValueError('정적 분석만 선택한 작업에서 대상을 실행할 수 없습니다')
         selected = [t for t in run['tests'] if t['id'] in test_ids]
         rows = []
         for test in selected:
@@ -2469,9 +2520,11 @@ class Engine:
                 return dict(stages=run['stages'], status=run['status'])
 
             async def env(**kw):
-                return await self.environment(cancel)
+                return await self.environment(cancel, analysis_mode=self._analysis_mode(run))
 
             async def static(target, **kw):
+                if self._analysis_mode(run) == 'dynamic':
+                    raise ValueError('선택한 동적 분석 범위에서 정적 분석을 요청할 수 없습니다')
                 return await self._step(
                     run, 'static_' + target, lambda: self._static(run, target, cancel), cancel
                 )
@@ -2509,6 +2562,8 @@ class Engine:
                 )
 
             async def tests(test_ids, **kw):
+                if self._analysis_mode(run) == 'static':
+                    raise ValueError('선택한 정적 분석 범위에서 대상을 실행할 수 없습니다')
                 if run['stages'].get('image', {}).get('status') != 'success':
                     raise ValueError('검증한 분석 이미지가 먼저 필요합니다')
                 return await self._step(
@@ -2540,12 +2595,17 @@ class Engine:
 
             async def recover(action, **kw):
                 if action == 'rediscover':
-                    return await self.environment(cancel)
+                    return await self.environment(cancel, analysis_mode=self._analysis_mode(run))
                 if action == 'prepare_image':
+                    if self._analysis_mode(run) == 'static':
+                        raise ValueError('선택한 정적 분석 범위에서 실행 환경을 준비할 수 없습니다')
                     return await self._step(run, 'image', lambda: self._image(run, cancel), cancel)
                 if action == 'reinterpret':
                     return await self._interpret(run, cancel)
                 if action == 'start_local_services':
+                    if self._analysis_mode(run) == 'static':
+                        return dict(ollama=await client.ensure_server(cancel=cancel),
+                                    docker=dict(status='not_requested'))
                     docker = self._docker()
                     probe = await docker.probe()
                     # A selected remote engine must not trigger unrelated local Desktop work.
@@ -2603,9 +2663,7 @@ class Engine:
                     return await tests([t['id'] for t in run['tests']])
                 return {t: await static(t) for t in ('original', 'reimplementation')}
 
-            registry = AgentRegistry(
-                run['run_id'],
-                dict(
+            handlers = dict(
                     get_status=status,
                     check_environment=env,
                     start_static=static,
@@ -2620,7 +2678,16 @@ class Engine:
                     generate_report=report,
                     recover=recover,
                     retry=retry,
-                ),
+                )
+            if self._analysis_mode(run) == 'static':
+                handlers.pop('run_tests')
+                handlers.pop('get_mismatches')
+            elif self._analysis_mode(run) == 'dynamic':
+                for name in ('start_static', 'compare_structure', 'list_functions', 'get_function'):
+                    handlers.pop(name)
+            registry = AgentRegistry(
+                run['run_id'],
+                handlers,
                 test_ids=[t['id'] for t in run['tests']],
                 state=lambda: dict(
                     file_registered=len(run['files']) == 2,
@@ -2640,13 +2707,15 @@ class Engine:
                 max_tokens=options.max_output_tokens,
                 context_chars=min(options.context_budget * 2, 40000),
                 request_budget=self._workflow_budget.snapshot if self._workflow_budget else None,
-                completion_check=lambda: all(
-                    run['stages'][s]['status'] == 'success'
-                    for s in ('structure', 'image', 'dynamic')
-                )
-                and all(
-                    run['stages'][s]['status'] in ('success', 'partial')
-                    for s in ('static_original', 'static_reimplementation')
+                completion_check=lambda: (
+                    self._analysis_mode(run) == 'dynamic' or (
+                        run['stages']['structure']['status'] == 'success'
+                        and all(run['stages'][s]['status'] in ('success', 'partial')
+                                for s in ('static_original', 'static_reimplementation'))
+                    )
+                ) and (
+                    self._analysis_mode(run) == 'static'
+                    or all(run['stages'][s]['status'] == 'success' for s in ('image', 'dynamic'))
                 ),
             )
             context = self._context(run, question=instruction, options=options)
@@ -2702,13 +2771,13 @@ class Engine:
             'image',
             'dynamic',
         ]
-        if run['mode'] == 'static':
+        if self._analysis_mode(run) == 'static':
             required = ['metadata', 'static_original', 'static_reimplementation', 'structure']
-        if run['mode'] == 'dynamic':
+        if self._analysis_mode(run) == 'dynamic':
             required = ['metadata', 'image', 'dynamic']
-        if run['mode'] in ('automatic', 'agent') and self._llm_requested():
+        if self._ai_mode(run) != 'off':
             required.append('llm')
-        if run['mode'] == 'agent':
+        if self._ai_mode(run) == 'agent':
             required.append('agent')
         return required
 
@@ -2723,8 +2792,31 @@ class Engine:
                 else 'partial'
             )
         )
+        def status(names):
+            states = [run['stages'].get(name, {}).get('status', 'pending') for name in names]
+            if all(value == 'success' for value in states):
+                return 'success'
+            if 'running' in states:
+                return 'running'
+            if cancelled(cancel) or 'cancelled' in states:
+                return 'cancelled'
+            if 'success' in states or 'partial' in states:
+                return 'partial'
+            if 'failed' in states:
+                return 'failed'
+            return 'blocked' if 'blocked' in states else 'pending'
+
+        scope, ai_mode = self._analysis_mode(run), self._ai_mode(run)
+        run['analysis_status'] = dict(
+            static='not_requested' if scope == 'dynamic' else status(
+                ['static_original', 'static_reimplementation', 'structure']),
+            dynamic='not_requested' if scope == 'static' else status(['image', 'dynamic']),
+            ai='not_requested' if ai_mode == 'off' else status(
+                ['llm', 'agent'] if ai_mode == 'agent' else ['llm']),
+        )
+        scope_options = ['--analysis-mode', scope, '--ai-mode', ai_mode]
         run['reproduction'] = dict(
-            cli=f"python -m recheck analyze --original <원본경로> --reimplementation <재구현경로> --tests tests.json --mode {run['mode']}",
+            cli=f"python -m recheck analyze --original <원본경로> --reimplementation <재구현경로> --tests tests.json --mode {run['mode']} --analysis-mode {scope} --ai-mode {ai_mode}",
             argv=[
                 'python',
                 '-m',
@@ -2738,6 +2830,7 @@ class Engine:
                 str(self.store.run_dir(run['run_id']) / 'tests.json'),
                 '--mode',
                 run['mode'],
+                *scope_options,
             ],
             input_hashes={k: v['sha256'] for k, v in run['files'].items()},
             settings=run['settings'],
@@ -2873,26 +2966,28 @@ class Engine:
                 delay_seconds=1,
             )
             run['settings'] = self.settings.model_dump()
-            client = None
-            try:
-                client = self._client()
-                # Only start local installed services; never switch engine OS or restart another server.
-                probe = await client.probe()
-                if not probe.get('connected', False):
-                    await client.ensure_server(cancel=cancel)
-            except Exception as exc:
-                self._event(run, 'recovery_service_error', error=str(exc))
-            finally:
-                if client is not None:
-                    await client.close()
-            docker = await self._docker().probe()
-            if not docker.get('ready', False):
-                self._event(run, 'recovery_docker_check', result=docker)
-                if docker.get('desktop') and (
-                    not self.settings.docker_context or docker.get('local_endpoint')
-                ):
-                    started = await self._docker().start_desktop(cancel=cancel)
-                    self._event(run, 'recovery_docker_start', result=started)
+            if self._ai_mode(run) != 'off':
+                client = None
+                try:
+                    client = self._client()
+                    # Only start local installed services; never switch engine OS or restart another server.
+                    probe = await client.probe()
+                    if not probe.get('connected', False):
+                        await client.ensure_server(cancel=cancel)
+                except Exception as exc:
+                    self._event(run, 'recovery_service_error', error=str(exc))
+                finally:
+                    if client is not None:
+                        await client.close()
+            if self._analysis_mode(run) != 'static':
+                docker = await self._docker().probe()
+                if not docker.get('ready', False):
+                    self._event(run, 'recovery_docker_check', result=docker)
+                    if docker.get('desktop') and (
+                        not self.settings.docker_context or docker.get('local_endpoint')
+                    ):
+                        started = await self._docker().start_desktop(cancel=cancel)
+                        self._event(run, 'recovery_docker_start', result=started)
             for _ in range(10):
                 if cancelled(cancel):
                     break

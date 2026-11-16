@@ -18,6 +18,7 @@ class ToolSetupPanel(QWidget):
         self.on_cancel = on_cancel
         self._busy = False
         self._inspection = {}
+        self._preferred_tools = ()
         layout = QVBoxLayout(self)
         description = QLabel(
             '배포 ZIP의 Recheck.exe에는 실행용 Python이 포함되어 있습니다. '
@@ -27,6 +28,11 @@ class ToolSetupPanel(QWidget):
         )
         description.setWordWrap(True)
         layout.addWidget(description)
+        self.analysis_context = QLabel()
+        self.analysis_context.setTextFormat(Qt.TextFormat.PlainText)
+        self.analysis_context.setWordWrap(True)
+        self.analysis_context.hide()
+        layout.addWidget(self.analysis_context)
         self.summary = QLabel('도구 확인을 눌러 설치 상태를 살펴보세요.')
         self.summary.setTextFormat(Qt.TextFormat.PlainText)
         self.summary.setWordWrap(True)
@@ -120,12 +126,47 @@ class ToolSetupPanel(QWidget):
             self.inspection_done,
         )
 
-    def inspection_done(self, result):
-        self._inspection = result
+    def focus_for_analysis(self, analysis_mode, static_backend='auto'):
+        """Prioritize the chosen analysis tools; never inspect or install here."""
+        if analysis_mode not in ('static', 'dynamic', 'both'):
+            raise ValueError('지원하지 않는 분석 모드입니다.')
+        if static_backend not in ('auto', 'direct', 'rea'):
+            raise ValueError('지원하지 않는 정적 분석 도구 선택입니다.')
+        if analysis_mode == 'static' and static_backend == 'direct':
+            self._preferred_tools = ('ghidra', 'java')
+            message = ('정적분석 · 직접 설치: Ghidra와 호환 JDK를 설치하고 분석 설정에서 '
+                       '설치 폴더를 선택하세요. 이 방식에는 Docker가 필요하지 않습니다.')
+        elif analysis_mode == 'dynamic':
+            self._preferred_tools = ('docker',)
+            message = ('동적분석: Docker Desktop을 설치·실행하고 Linux 컨테이너가 준비되면 '
+                       '분석 도구 내려받아 준비를 누르세요. Ghidra·JDK 직접 설치는 필요하지 않습니다.')
+        elif analysis_mode == 'both' and static_backend == 'direct':
+            self._preferred_tools = ('docker', 'ghidra', 'java')
+            message = ('둘 다 분석 · 정적 도구 직접 설치: 동적분석용 Docker Desktop과 '
+                       '정적분석용 Ghidra·호환 JDK가 필요합니다. 설치 후 분석 설정의 경로를 확인하세요.')
+        else:
+            self._preferred_tools = ('docker',)
+            title = '정적분석' if analysis_mode == 'static' else '둘 다 분석'
+            message = (title + ': Docker Desktop을 설치·실행한 뒤 분석 도구 내려받아 준비를 '
+                       '누르세요. REA·Ghidra·JDK가 분석 환경에 포함됩니다. '
+                       '정적 도구를 직접 설치하려면 분석 설정에서 방식을 선택하세요.')
+        self.analysis_context.setText(message)
+        self.analysis_context.show()
+        self._show_tools()
+
+    def _show_tools(self):
         self.tools.clear()
         labels = {'ready': '사용 가능', 'bundled': '포함됨', 'missing': '설치 필요',
                   'unavailable': '확인 필요', 'cancelled': '취소됨'}
-        for tool in result.get('tools', []):
+        tools = list(self._inspection.get('tools', []))
+        if self._preferred_tools:
+            priorities = {tool_id: index for index, tool_id in enumerate(self._preferred_tools)}
+            tools.sort(key=lambda tool: (
+                tool.get('id') not in priorities,
+                tool.get('status') in ('ready', 'bundled'),
+                priorities.get(tool.get('id'), len(priorities)),
+            ))
+        for tool in tools:
             detail = ' · '.join(str(tool.get(key) or '') for key in ('path', 'reason')).strip(' ·')
             row = QTreeWidgetItem([
                 tool['name'], labels.get(tool.get('status'), '확인 필요'),
@@ -136,6 +177,10 @@ class ToolSetupPanel(QWidget):
             self.tools.addTopLevelItem(row)
         if self.tools.topLevelItemCount():
             self.tools.setCurrentItem(self.tools.topLevelItem(0))
+
+    def inspection_done(self, result):
+        self._inspection = result
+        self._show_tools()
         winget = result.get('winget', {})
         self.winget_button.setVisible(not winget.get('ready', False))
         self.summary.setText(

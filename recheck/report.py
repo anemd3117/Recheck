@@ -5,6 +5,74 @@ from .models import resources_root
 from .display import stage_label, status_label, target_label
 
 
+def analysis_scope_summary(run):
+    """Read requested scopes and their outcomes without changing historical runs."""
+    legacy_mode = run.get('mode')
+    scope = run.get('analysis_mode')
+    if scope not in ('static', 'dynamic', 'both'):
+        scope = {
+            'static': 'static', 'dynamic': 'dynamic', 'automatic': 'both', 'agent': 'both'
+        }.get(legacy_mode)
+    ai_mode = run.get('ai_mode')
+    if ai_mode not in ('off', 'explain', 'agent'):
+        settings = run.get('settings') or {}
+        llm = run.get('llm') or {}
+        if legacy_mode in ('static', 'dynamic'):
+            ai_mode = 'off'
+        elif legacy_mode == 'agent':
+            ai_mode = 'agent'
+        elif legacy_mode == 'automatic' and (
+            llm.get('status') in ('success', 'failed', 'partial', 'cancelled')
+            or settings.get('model')
+            or settings.get('active_ai_profile') not in (None, '', 'legacy-local')
+        ):
+            ai_mode = 'explain'
+        else:
+            ai_mode = None
+    stages = run.get('stages') or {}
+    recorded = run.get('analysis_status') or {}
+
+    def outcome(kind, requested, names):
+        if requested is False:
+            return 'not_requested'
+        if kind in recorded:
+            return recorded[kind]
+        values = [(stages.get(name) or {}).get('status') for name in names]
+        if not values or any(value is None for value in values):
+            return 'unrecorded'
+        if all(value == 'success' for value in values):
+            return 'success'
+        if 'cancelled' in values:
+            return 'cancelled'
+        if all(value == 'failed' for value in values):
+            return 'failed'
+        if 'success' in values:
+            return 'partial'
+        if 'blocked' in values:
+            return 'blocked'
+        if 'running' in values:
+            return 'running'
+        if 'pending' in values:
+            return 'pending'
+        return 'partial'
+
+    return dict(
+        analysis_mode=scope,
+        ai_mode=ai_mode,
+        static=outcome(
+            'static', scope != 'dynamic' if scope else None,
+            ('metadata', 'static_original', 'static_reimplementation', 'structure'),
+        ),
+        dynamic=outcome(
+            'dynamic', scope != 'static' if scope else None, ('metadata', 'image', 'dynamic'),
+        ),
+        ai=outcome(
+            'ai', ai_mode != 'off' if ai_mode else None,
+            ('llm', 'agent') if ai_mode == 'agent' else ('llm',),
+        ),
+    )
+
+
 def render_report(run, destination):
     def dump(value):
         return html.escape(json.dumps(value, ensure_ascii=False, indent=2, default=str))
@@ -37,11 +105,47 @@ def render_report(run, destination):
         return ' · '.join(links.values())
 
     behavior = run.get('behavior', {})
+    scope = analysis_scope_summary(run)
     rate = behavior.get('match_rate')
     rate_text = f'{rate*100:.2f}%' if isinstance(rate, (int, float)) else '미측정'
+    observation_scope = behavior.get('scope', '등록하여 실행한 입력 범위에서만 확인한 결과')
+    if scope['dynamic'] == 'not_requested':
+        rate_text = '선택하지 않음'
+        observation_scope = '파일에서 수집한 정적 근거만 확인한 결과 · 실행 동작 미검증'
     pieces = [
-        f"<section><h2>{esc(run['run_id'])}</h2><p>실행 상태: <b>{esc(status_label(run['status']))}</b> · 동작 일치율: <b>{rate_text}</b> ({behavior.get('matched',0)}/{behavior.get('denominator',0)})</p><p>{esc(behavior.get('scope','등록하여 실행한 입력 범위에서만 확인한 결과'))}</p><small>실측 수치·상태 생성: Recheck. 불일치가 발견되어도 분석 절차가 모두 끝나면 실행 상태는 성공입니다.</small></section>"
+        f"<section><h2>{esc(run['run_id'])}</h2><p>실행 상태: <b>{esc(status_label(run['status']))}</b> · 동작 일치율: <b>{rate_text}</b> ({behavior.get('matched',0)}/{behavior.get('denominator',0)})</p><p>{esc(observation_scope)}</p><small>실측 수치·상태 생성: Recheck. 불일치가 발견되어도 분석 절차가 모두 끝나면 실행 상태는 성공입니다.</small></section>"
     ]
+    scope_names = {'static': '정적분석', 'dynamic': '동적분석', 'both': '둘 다 분석'}
+    ai_names = {'off': '사용 안 함', 'explain': '결과 설명', 'agent': '결과 설명 + AI 추가 확인'}
+    pieces.append(
+        '<section><h2>선택한 분석 범위와 완료 상태</h2><table>'
+        '<tr><th>항목</th><th>선택·상태</th></tr>'
+    )
+    scope_rows = [
+        ('선택한 분석', scope_names.get(scope['analysis_mode'], '미기록')),
+        ('AI 사용', ai_names.get(scope['ai_mode'], '미기록')),
+    ]
+    for kind, label in (
+        ('static', '정적분석'), ('dynamic', '동적분석'), ('ai', 'AI 설명·추가 확인')
+    ):
+        value = {'not_requested': '선택하지 않음', 'unrecorded': '미기록'}.get(
+            scope[kind], status_label(scope[kind])
+        )
+        scope_rows.append((label, value))
+    for label, value in scope_rows:
+        pieces.append(f'<tr><td>{esc(label)}</td><td>{esc(value)}</td></tr>')
+    pieces.append('</table>')
+    if scope['dynamic'] == 'not_requested':
+        pieces.append('<p>동적분석을 선택하지 않아 실행 동작은 검증하지 않았습니다.</p>')
+    elif scope['dynamic'] != 'success':
+        pieces.append(
+            '<p>동적분석을 완료하지 않았습니다. '
+            '정적분석의 성공만으로 실행 동작이 같다고 판단할 수 없습니다.</p>'
+        )
+    pieces.append(
+        '<p>각 분석의 성공은 선택한 절차의 완료를 뜻합니다. '
+        '동작의 일치 여부는 실제로 측정한 입력별 결과에서 확인하세요.</p></section>'
+    )
     environment = run.get('environment', {})
     structure = run.get('structure') or {}
     if structure.get('analysis_kind') == 'managed':

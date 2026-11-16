@@ -134,3 +134,47 @@ def test_long_setup_has_its_own_cancellation_control(panel):
     widget.cancel_button.click()
     assert cancelled == [True]
     assert not widget.cancel_button.isEnabled()
+
+
+@pytest.mark.parametrize('scope,backend,expected', [
+    ('static', 'direct', 'ghidra'),
+    ('static', 'rea', 'docker'),
+    ('static', 'auto', 'docker'),
+    ('dynamic', 'direct', 'docker'),
+    ('both', 'direct', 'docker'),
+])
+def test_analysis_context_selects_relevant_missing_tool_before_developer_tools(
+        panel, scope, backend, expected):
+    widget, pending, _ = panel
+    assert hasattr(widget, 'focus_for_analysis'), 'Mode-specific installation guidance is missing'
+    widget.focus_for_analysis(scope, backend)
+    show_tools(widget, [tool('git', name='Git'), tool('python', name='Python'),
+                        tool('java', name='Java JDK'), tool('ghidra', name='Ghidra'), tool()])
+    assert widget.selected()['id'] == expected
+    assert widget.tools.topLevelItem(0).data(0, 256)['id'] == expected
+    assert not widget.analysis_context.isHidden()
+    assert widget.tools.topLevelItemCount() == 5
+    assert pending == []
+
+
+def test_direct_static_context_selects_missing_jdk_when_ghidra_is_ready(panel):
+    widget, pending, _ = panel
+    assert hasattr(widget, 'focus_for_analysis'), 'Mode-specific installation guidance is missing'
+    show_tools(widget, [tool('git', name='Git'),
+                        tool('ghidra', name='Ghidra', status='ready', can_install=False),
+                        tool('java', name='Java JDK'), tool()])
+    widget.focus_for_analysis('static', 'direct')
+    assert widget.selected()['id'] == 'java'
+    assert widget.install_button.isEnabled()
+    assert pending == []
+
+
+def test_focus_during_refresh_keeps_the_existing_work_busy_and_never_starts_install(panel):
+    widget, pending, _ = panel
+    assert hasattr(widget, 'focus_for_analysis'), 'Mode-specific installation guidance is missing'
+    show_tools(widget, [tool('git', name='Git'), tool()])
+    widget.set_busy(True)
+    widget.focus_for_analysis('both', 'auto')
+    assert not widget.refresh_button.isEnabled()
+    assert not widget.install_button.isEnabled()
+    assert pending == []

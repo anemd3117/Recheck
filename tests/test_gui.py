@@ -461,11 +461,14 @@ def test_scenario_invokes_normal_gui_analysis_handler(
         def __init__(self, settings, on_event=None):
             self.store = FakeStore(tmp_path)
 
-        async def analyze(self, original, replacement, tests, mode, cancel):
+        async def analyze(self, original, replacement, tests, mode, cancel, *, analysis_mode, ai_mode):
             called.append((original, replacement, tests, mode))
             return run
 
     window.engine_factory = ScenarioEngine
+    async def ready(settings, cancel, emit, analysis_mode, paths):
+        return {'can_analyze': True, 'environment': {}, 'files': []}
+    monkeypatch.setattr(window, 'analysis_preflight', ready)
     original = tmp_path / "원본 fixture"
     replacement = tmp_path / "재구현 fixture"
     original.write_bytes(b"header fixture only")

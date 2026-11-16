@@ -2,6 +2,8 @@
 
 STATUS_LABELS = {
     "pending": "시작 전",
+    "not_requested": "선택하지 않음",
+    "unrecorded": "미기록",
     "waiting": "준비를 기다리는 중",
     "blocked": "진행할 수 없음",
     "running": "실행 중",

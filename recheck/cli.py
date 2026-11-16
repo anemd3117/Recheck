@@ -272,7 +272,9 @@ def _selected_settings(args):
             changed if item.profile_id == profile.profile_id else item
             for item in settings.ai_profiles
         ]
-    if args.command == 'command' or (args.command == 'analyze' and args.mode == 'agent'):
+    if args.command == 'command' or (args.command == 'analyze' and (
+        args.ai_mode == 'agent' or (args.ai_mode is None and args.mode == 'agent')
+    )):
         from ai_providers.profiles import ProfileManager
 
         proof = ProfileManager(settings=settings).cached_capabilities(settings.active_ai_profile)
@@ -337,6 +339,10 @@ def _parser():
     analyze.add_argument(
         '--mode', choices=['automatic', 'agent', 'static', 'dynamic'], default='automatic'
     )
+    analyze.add_argument('--analysis-mode', choices=['static', 'dynamic', 'both'],
+                         help='분석 범위; 미지정 시 기존 --mode 선택을 따릅니다')
+    analyze.add_argument('--ai-mode', choices=['off', 'explain', 'agent'],
+                         help='AI 설명을 분석 범위와 별도로 선택; off는 AI를 호출하지 않습니다')
     for name in ('reinterpret', 'recover', 'report', 'diagnostic-zip'):
         p = sub.add_parser(name)
         p.add_argument('run_id')
@@ -387,21 +393,19 @@ def _execute(args, cancel):
     elif command == 'history':
         result = engine.store.list_runs()
     elif command == 'analyze':
+        scope = args.analysis_mode or (args.mode if args.mode in ('static', 'dynamic') else 'both')
+        if args.analysis_mode is not None and scope != 'static' and not args.tests:
+            raise CLIError('tests_required', '동적 분석에는 --tests로 등록한 입력이 필요합니다.')
         tests = (
             load_json(args.tests)
             if args.tests
-            else [
-                dict(
-                    id='baseline',
-                    description='입력 없는 기본 실행',
-                    args=[],
-                    stdin='',
-                    source='user',
-                )
-            ]
+            else [] if scope == 'static' else [dict(
+                id='baseline', description='입력 없는 기본 실행', args=[], stdin='', source='user',
+            )]
         )
         result = asyncio.run(
-            engine.analyze(args.original, args.reimplementation, tests, args.mode, cancel)
+            engine.analyze(args.original, args.reimplementation, tests, args.mode, cancel,
+                           analysis_mode=args.analysis_mode, ai_mode=args.ai_mode)
         )
     elif command == 'question':
         result = asyncio.run(engine.question(args.run_id, args.question, cancel))

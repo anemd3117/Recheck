@@ -2,7 +2,7 @@
 
 ## 배포 ZIP으로 실행
 
-1. [1.2.3 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v1.2.3-prototype.1/Recheck-1.2.3-prototype.1-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.3-prototype.1)도 확인하세요.
+1. [1.2.4 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v1.2.4-prototype.1/Recheck-1.2.4-prototype.1-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.4-prototype.1)도 확인하세요.
 2. ZIP의 압축을 모두 풉니다.
 3. `Recheck` 폴더의 **`Recheck.exe`**를 실행합니다. 같은 위치의 `_internal` 폴더도 함께 유지하세요.
 
@@ -13,6 +13,12 @@
 새 사용자의 시작 경로는 **Gemini 무료**이며 모델은 Gemini 3.5 Flash-Lite입니다. **Gemini 무료로 시작하기**를 눌러 Google AI Studio에서 자신의 키를 만들고, 프로젝트가 Free tier인지 확인한 뒤 앱의 가려진 키 입력란에 저장합니다. 실제 기본 응답과 JSON 검증을 통과해야 선택한 분석 AI로 사용합니다. 키 발급부터 화면 순서까지 [Gemini 무료 연결 안내](GEMINI_FREE_SETUP.md)를 따르세요. 앱에 개발자 공용 키는 들어 있지 않습니다.
 
 GPT는 추천 선택으로 유지합니다. **ChatGPT로 연결하고 자동 설정**을 누르면 본인 계정으로 로그인할 수 있습니다. 기존 설치의 저장된 AI·모델·예산은 업데이트로 교체하지 않습니다.
+
+## 분석 모드 선택
+
+**프로그램 비교** 화면에서 **정적분석·동적분석·둘 다 분석**을 선택합니다. 기본은 둘 다 분석이며 **AI 설명 사용**은 별도로 끌 수 있습니다. 정적분석만 선택하면 실행 입력은 숨겨지고, 동적분석만 선택하면 정적 도구는 필요하지 않습니다. **필요 도구 확인**에서 현재 선택에 맞는 준비 상태를 확인하고 **도구 설치·준비 안내**로 이어가세요. 시작 전에 같은 조건을 다시 확인합니다.
+
+도구가 없으면 안내를 따라 준비하며, 파일 형식의 지원 제한은 설치 문제와 따로 표시됩니다. 지원하지 않는 Windows 실행을 Docker 설치로 해결할 수 있다고 안내하지 않습니다. 분석 모드를 직접 바꿔 정적 근거만 확인할 수 있습니다. 자세한 내용은 [분석 모드 안내](ANALYSIS_MODES.md)를 참고하세요.
 
 ## AI 없이 ZIP 구성부터 비교하기
 

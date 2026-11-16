@@ -610,6 +610,27 @@ class MainWindow(QMainWindow):
         options_box = QVBoxLayout(analysis_options)
         options_box.setContentsMargins(0, 0, 0, 0)
         box.addLayout(product)
+        self.analysis_scope_panel = QWidget()
+        scope_box = QVBoxLayout(self.analysis_scope_panel)
+        scope_box.setContentsMargins(0, 0, 0, 0)
+        scope_row = QHBoxLayout()
+        scope_row.addWidget(QLabel('분석 모드'))
+        self.analysis_mode = QComboBox()
+        self.analysis_mode.setAccessibleName('정적분석·동적분석 선택')
+        self.analysis_mode.addItem('정적분석 · 실행 없이 구조 비교', 'static')
+        self.analysis_mode.addItem('동적분석 · 같은 입력으로 실행 비교', 'dynamic')
+        self.analysis_mode.addItem('둘 다 분석 · 추천', 'both')
+        self.analysis_mode.setCurrentIndex(2)
+        scope_row.addWidget(self.analysis_mode, 1)
+        scope_box.addLayout(scope_row)
+        from .analysis_setup import AnalysisSetupPanel
+        self.analysis_setup = AnalysisSetupPanel(
+            check_environment=self.check_analysis_tools,
+            install_tools=self.open_analysis_tool_installation,
+            open_settings=self.open_analysis_settings,
+        )
+        scope_box.addWidget(self.analysis_setup)
+        box.addWidget(self.analysis_scope_panel)
         files = QHBoxLayout()
         self.original = FileCard("1. 기존 프로그램 (원본)")
         self.reimplementation = FileCard("2. 비교할 새 프로그램")
@@ -675,15 +696,21 @@ class MainWindow(QMainWindow):
         self.comparison_mode_panel = QWidget()
         row = QHBoxLayout(self.comparison_mode_panel)
         row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(QLabel("분석 모드"))
+        self.ai_explanation = QCheckBox('AI 설명 사용')
+        self.ai_explanation.setChecked(True)
+        self.ai_explanation.setToolTip('선택한 분석 근거를 AI가 설명합니다. 분석 범위와 별도로 켜거나 끌 수 있습니다.')
+        self.ai_explanation.toggled.connect(self.ai_explanation_changed)
+        scope_row.addWidget(self.ai_explanation)
+        row.addWidget(QLabel('AI 설명 방식'))
         self.mode = QComboBox()
-        self.mode.addItem("기본 비교 + AI 설명", "automatic")
+        self.mode.setAccessibleName('AI 설명 방식')
+        self.mode.addItem("기본 AI 설명", "automatic")
         self.mode.addItem("AI가 추가로 살펴보기 · 기능 확인 필요", "agent")
         self.mode.model().item(1).setEnabled(False)
         self.mode.activated.connect(lambda *_: setattr(self, '_mode_manually_chosen', True))
         row.addWidget(self.mode)
         self.mode_note = QLabel(
-            "기본 비교를 추천합니다. 추가 분석은 AI 기능 확인 후 사용할 수 있습니다."
+            "추가 분석은 AI 기능 확인 후 사용할 수 있으며 선택한 분석 범위 안에서만 진행합니다."
         )
         self.mode_note.setObjectName("muted")
         self.mode_note.setWordWrap(True)
@@ -733,6 +760,10 @@ class MainWindow(QMainWindow):
         bottom.addWidget(self.analysis_note, 1)
         self.start_button = self.button("비교 시작하기", self.start_analysis, bottom)
         self.start_button.setObjectName("primary")
+        self.analysis_mode.currentIndexChanged.connect(self.analysis_scope_changed)
+        self.analysis_mode.activated.connect(self.check_analysis_tools)
+        self.original.path.textChanged.connect(self.analysis_scope_changed)
+        self.reimplementation.path.textChanged.connect(self.analysis_scope_changed)
         self.product_mode.currentIndexChanged.connect(self.product_mode_changed)
         self.product_mode_changed()
         scroll = QScrollArea()
@@ -1116,14 +1147,17 @@ class MainWindow(QMainWindow):
             return
         from .setup_flow import next_action
 
-        tools_ready = all(
-            self.last_environment.get(name, {}).get('ready') for name in ('docker', 'ghidra')
-        )
+        from .analysis_setup import analysis_readiness
+        tools_ready = analysis_readiness(
+            self.analysis_mode.currentData(),
+            getattr(self, '_analysis_environment', self.last_environment),
+            static_backend=self.settings.static_backend,
+        )['can_analyze']
         files_ready = bool(
             self.original.path.text().strip() and self.reimplementation.path.text().strip()
         )
         action = next_action(
-            ai_ready=self._ai_ready,
+            ai_ready=self._ai_ready or not self.ai_explanation.isChecked(),
             tools_ready=tools_ready,
             files_ready=files_ready,
             result_ready=bool(self.run_result),
@@ -1150,8 +1184,8 @@ class MainWindow(QMainWindow):
             'compare_package': ('패키지 구성 비교 시작 →', 'AI나 실행 입력 없이 구성 파일의 추가·삭제·변경을 확인합니다.'),
             'view_package_result': ('패키지 비교 결과 확인 →', '구성 파일 비교 결과와 내보내기를 확인하세요.'),
             'prepare_tools': (
-                '도구 자동 준비 →',
-                '2단계 · 필요한 도구를 찾고 Recheck의 연결 설정을 자동으로 저장합니다.',
+                '선택한 분석 도구 준비 →',
+                '2단계 · 선택한 분석에 필요한 도구의 설치·준비 안내를 확인하세요.',
             ),
             'choose_files': (
                 '비교할 파일 선택 →',
@@ -1546,7 +1580,8 @@ class MainWindow(QMainWindow):
         self.reimplementation.setVisible(comparison or package)
         self.reconstruction_panel.setVisible(not comparison and not package)
         self.comparison_mode_panel.setVisible(comparison)
-        self.inputs_group.setVisible(not package)
+        self.analysis_scope_panel.setVisible(comparison)
+        self.inputs_group.setVisible(not package and (not comparison or self.analysis_mode.currentData() != 'static'))
         self.original.inventory_mode = self.reimplementation.inventory_mode = package
         self.original.setTitle('1. 원본 패키지' if package else '1. 기존 프로그램 (원본)')
         self.reimplementation.setTitle('2. 변경된 패키지' if package else '2. 비교할 새 프로그램')
@@ -1569,6 +1604,90 @@ class MainWindow(QMainWindow):
             else "준비 중인 기능입니다. 지금은 원본 파일과 요청 사항을 보관하며 자동 생성·수정은 진행하지 않습니다."
         )
         self.refresh_start_guide()
+        self.analysis_scope_changed()
+
+    def ai_explanation_changed(self, enabled):
+        self.mode.setEnabled(enabled)
+        self.refresh_start_guide()
+
+    def analysis_scope_changed(self, *_):
+        if not hasattr(self, 'inputs_group'):
+            return
+        comparison = self.product_mode.currentData() == 'comparison'
+        scope = self.analysis_mode.currentData()
+        if comparison:
+            self.inputs_group.setVisible(scope != 'static')
+            self.analysis_note.setText({
+                'static': '정적분석은 프로그램을 실행하지 않습니다. 구조 비교만으로 동작의 일치를 판정하지 않습니다.',
+                'dynamic': '동적분석은 격리 환경에서 등록한 입력만 실행해 비교합니다. 내부 구조는 비교하지 않습니다.',
+                'both': '정적 구조와 등록한 입력의 실행 결과를 각각 확인합니다. 실행하지 못한 동작은 미검증으로 남습니다.',
+            }[scope])
+        if hasattr(self, 'analysis_setup'):
+            self.analysis_setup.update_state(
+                scope, getattr(self, '_analysis_environment', self.last_environment),
+                static_backend=self.settings.static_backend,
+                files=getattr(self, '_analysis_files', ()) if getattr(self, '_analysis_paths', None) == self.analysis_paths() else (),
+            )
+        self.refresh_start_guide()
+
+    def analysis_paths(self):
+        return (self.original.path.text().strip(), self.reimplementation.path.text().strip())
+
+    def open_analysis_settings(self):
+        self.navigation.setCurrentRow(5)
+        self.settings_tabs.setCurrentIndex(0)
+
+    def open_analysis_tool_installation(self):
+        self.open_tool_installation()
+        self.tool_setup_panel.focus_for_analysis(
+            self.analysis_mode.currentData(), self.collect_settings().static_backend)
+
+    async def analysis_preflight(self, settings, cancel, emit, analysis_mode, paths):
+        from .models import inspect_binary
+        from .analysis_setup import analysis_readiness
+
+        environment = await self.engine_for(settings, emit).environment(
+            cancel=cancel, analysis_mode=analysis_mode, include_ai=False)
+        files = []
+        for path in paths:
+            if cancel.is_set():
+                return dict(can_analyze=False, cancelled=True, environment=environment, files=files)
+            if path:
+                try:
+                    files.append(await asyncio.to_thread(inspect_binary, path))
+                except (OSError, ValueError) as exc:
+                    files.append(dict(path=path, name=Path(path).name, static_supported=False,
+                                      execution_supported=False, reason=str(exc),
+                                      static_reason=str(exc), execution_reason=str(exc)))
+        readiness = analysis_readiness(
+            analysis_mode, environment, static_backend=settings.static_backend, files=files)
+        return dict(readiness, environment=environment, files=files)
+
+    def analysis_preflight_done(self, result, scope, paths):
+        if result.get('cancelled'):
+            self.notice('도구 확인을 중단했습니다. 대상 프로그램은 실행하지 않았습니다.')
+            return
+        # Results belong to the captured scope and files, never a later selection.
+        if scope != self.analysis_mode.currentData() or paths != self.analysis_paths():
+            return
+        self._analysis_environment = result.get('environment', {})
+        self._analysis_files = result.get('files', [])
+        self._analysis_paths = paths
+        self.analysis_scope_changed()
+        if not result.get('can_analyze'):
+            self.notice('선택한 분석을 준비하지 못했습니다. 필요한 도구·설치 안내와 파일 지원 범위를 확인하세요.')
+        else:
+            self.notice('선택한 분석에 필요한 도구를 확인했습니다. 분석 시작 시 다시 확인합니다.')
+
+    def check_analysis_tools(self, *_):
+        if self._task_join_pending or (self.worker and self.worker.isRunning()):
+            return
+        scope, paths = self.analysis_mode.currentData(), self.analysis_paths()
+        self.launch_task(
+            '선택한 분석 도구 확인 중',
+            lambda s, c, e: self.analysis_preflight(s, c, e, scope, paths),
+            lambda result: self.analysis_preflight_done(result, scope, paths),
+        )
 
     def collect_settings(self):
         values = (
@@ -1630,6 +1749,10 @@ class MainWindow(QMainWindow):
             self.provider_panel.set_busy(True)
         if hasattr(self, 'tool_setup_panel'):
             self.tool_setup_panel.set_busy(True)
+        self.analysis_setup.set_busy(True)
+        self.analysis_mode.setEnabled(False)
+        self.ai_explanation.setEnabled(False)
+        self.mode.setEnabled(False)
         for control in (*self.setting_fields.values(), self.server_url, self.model_combo):
             control.setEnabled(False)
         for button in self.task_buttons:
@@ -1666,6 +1789,10 @@ class MainWindow(QMainWindow):
         self._task_join_pending = False
         if hasattr(self, 'tool_setup_panel'):
             self.tool_setup_panel.set_busy(False)
+        self.analysis_setup.set_busy(False)
+        self.analysis_mode.setEnabled(True)
+        self.ai_explanation.setEnabled(True)
+        self.mode.setEnabled(self.ai_explanation.isChecked())
         self.cancel_button.setEnabled(False)
         self.cancel_button.hide()
         self.progress.hide()
@@ -1742,6 +1869,7 @@ class MainWindow(QMainWindow):
             ollama = {}
         if isinstance(result, dict) and "ollama" in result:
             self.last_environment.update(result)
+            self._analysis_environment = self.last_environment.copy()
         else:
             self.last_environment["ollama"] = ollama
 
@@ -1810,6 +1938,7 @@ class MainWindow(QMainWindow):
             )
         self.notice("환경 확인을 완료했습니다. 결과에서 준비 상태와 필요한 설정을 확인하세요.")
         self.refresh_selected_provider()
+        self.analysis_scope_changed()
         missing = []
         if not docker.get('ready'):
             missing.append(
@@ -2200,7 +2329,7 @@ class MainWindow(QMainWindow):
                 self.show_error(str(exc))
 
     def start_analysis(self):
-        if self.worker and self.worker.isRunning():
+        if self._task_join_pending or (self.worker and self.worker.isRunning()):
             self.notice("현재 작업을 완료하거나 취소한 뒤 다시 실행하세요.")
             return
         if self.product_mode.currentData() == 'package':
@@ -2210,7 +2339,8 @@ class MainWindow(QMainWindow):
         if not self.original.path.text().strip() or not self.reimplementation.path.text().strip():
             self.show_error("원본 파일과 재구현 파일을 모두 선택하세요.")
             return
-        tests = self.validate_inputs()
+        scope = self.analysis_mode.currentData()
+        tests = [] if scope == 'static' else self.validate_inputs()
         if tests is None:
             return
         if not self.persist_settings():
@@ -2220,17 +2350,30 @@ class MainWindow(QMainWindow):
             self.reimplementation.path.text().strip(),
         )
         mode = self.mode.currentData()
+        ai_mode = ('off' if not self.ai_explanation.isChecked() else
+                   'agent' if mode == 'agent' else 'explain')
+        paths = (original, rebuilt)
         self.stages.clear()
         self.stage_items = {}
         self.agent_view.clear()
         self.stage_section.findChild(QPushButton).setChecked(True)
-        self.launch_task(
-            "전체 분석 중",
-            lambda s, c, e: self.engine_for(s, e).analyze(
-                original, rebuilt, tests, mode=mode, cancel=c
-            ),
-            self.show_result,
-        )
+        async def work(settings, cancel, emit):
+            preflight = await self.analysis_preflight(settings, cancel, emit, scope, paths)
+            if cancel.is_set():
+                preflight['cancelled'] = True
+            if not preflight.get('can_analyze') or cancel.is_set():
+                return dict(preflight=preflight, result=None)
+            result = await self.engine_for(settings, emit).analyze(
+                original, rebuilt, tests, mode=mode, cancel=cancel,
+                analysis_mode=scope, ai_mode=ai_mode)
+            return dict(preflight=preflight, result=result)
+
+        def done(outcome):
+            self.analysis_preflight_done(outcome['preflight'], scope, paths)
+            if outcome.get('result') is not None:
+                self.show_result(outcome['result'])
+
+        self.launch_task('선택한 분석 준비·진행 중', work, done)
 
     def start_package_comparison(self):
         if self._task_join_pending or (self.worker and self.worker.isRunning()):
@@ -2392,6 +2535,16 @@ class MainWindow(QMainWindow):
                 if (result.get('behavior') or {}).get('denominator', 0)
                 else '\n실행 결과는 측정하지 않았습니다. 함수·구조 비교와 단계별 상태를 확인하세요.'
             )
+        )
+        from .report import analysis_scope_summary
+        scope = analysis_scope_summary(result)
+        scope_names = {'static': '정적분석', 'dynamic': '동적분석', 'both': '둘 다 분석'}
+        self.result_title.setText(
+            self.result_title.text() + '\n'
+            + scope_names.get(scope['analysis_mode'], '분석 범위 미기록') + ' · '
+            + ' / '.join(name + ': ' + status_label(scope[key])
+                         for key, name in [('static', '정적분석'), ('dynamic', '동적분석'), ('ai', 'AI 설명')])
+            + (' · 동작 미검증' if not (result.get('behavior') or {}).get('denominator') else '')
         )
         self.result_title.setToolTip('기록 번호: ' + run_id)
         self.result_summary.setPlainText(
@@ -2886,15 +3039,20 @@ def load_verification_scenario(config_path):
 
     config_path = Path(config_path).resolve(strict=True)
     config = json.loads(config_path.read_text(encoding="utf-8-sig"))
-    if not isinstance(config, dict) or set(config) != {
-        "original",
-        "reimplementation",
-        "tests",
-        "output_dir",
-    }:
+    required = {'original', 'reimplementation', 'tests', 'output_dir'}
+    optional = {'analysis_mode', 'ai_mode'}
+    if (not isinstance(config, dict) or not required <= set(config)
+            or set(config) - required - optional):
         raise ValueError(
-            "검증 설정에는 original, reimplementation, tests, output_dir만 필요합니다."
+            '검증 설정에는 original, reimplementation, tests, output_dir가 필요하며 '
+            'analysis_mode와 ai_mode만 추가할 수 있습니다.'
         )
+    for name, choices in (
+        ('analysis_mode', ('static', 'dynamic', 'both')),
+        ('ai_mode', ('off', 'explain', 'agent')),
+    ):
+        if name in config and config[name] not in choices:
+            raise ValueError(f'검증 {name} 값이 올바르지 않습니다.')
 
     def resolve(value):
         if not isinstance(value, str) or not value:
@@ -2914,12 +3072,15 @@ def load_verification_scenario(config_path):
         if not Path(result[name]).is_file():
             raise ValueError(f"검증 대상 파일이 없습니다: {name}")
     if any(
-        (Path(result["output_dir"]) / name).exists() for name in ("scenario.json", "scenario.png")
+        (Path(result["output_dir"]) / name).exists()
+        for name in ('scenario.json', 'scenario.png', 'scenario-setup.png')
     ):
         raise ValueError(
             "검증 기록이 이미 있습니다. 이전 근거를 보존하도록 새 output_dir를 지정하세요."
         )
-    result["tests"] = [test.model_dump() for test in validate_tests(tests)]
+    result['tests'] = ([] if config.get('analysis_mode') == 'static' and tests == [] else
+                       [test.model_dump() for test in validate_tests(tests)])
+    result.update({name: config[name] for name in optional if name in config})
     return result
 
 
@@ -2948,7 +3109,8 @@ def verification_artifacts(window):
     folder = Path(window.engine.store.root) / "runs" / run["run_id"]
     result_path, report_path = folder / "result.json", folder / "report.html"
     stored = json.loads(result_path.read_text(encoding="utf-8"))
-    for key in ("run_id", "attempt_id", "status", "behavior", "files"):
+    for key in ('run_id', 'attempt_id', 'status', 'behavior', 'files',
+                'analysis_mode', 'ai_mode', 'analysis_status', 'dynamic'):
         if stored.get(key) != run.get(key):
             raise ValueError(f"GUI와 저장 결과가 다릅니다: {key}")
     document = report_path.read_text(encoding="utf-8")
@@ -2960,6 +3122,15 @@ def verification_artifacts(window):
     if run["run_id"] not in document:
         raise ValueError("보고서의 실행 ID가 현재 결과와 다릅니다.")
     behavior = run.get("behavior", {})
+    from .report import analysis_scope_summary
+    scope = analysis_scope_summary(run)
+    dynamic_unselected = scope['dynamic'] == 'not_requested'
+    if dynamic_unselected and (
+        run.get('dynamic') or behavior.get('denominator', 0) != 0
+        or behavior.get('matched', 0) != 0 or behavior.get('match_rate') is not None
+        or behavior.get('tests')
+    ):
+        raise ValueError('동적분석 미선택 결과에 실행 관찰 또는 동작 수치가 있습니다.')
     displayed = None
     for index in range(window.measurements.topLevelItemCount()):
         item = window.measurements.topLevelItem(index)
@@ -2974,6 +3145,8 @@ def verification_artifacts(window):
     if displayed.text(2) != expected_rate:
         raise ValueError("GUI의 동작 일치율이 저장 결과와 다릅니다.")
     report_rate = f"{rate * 100:.2f}%" if isinstance(rate, (int, float)) else "미측정"
+    if dynamic_unselected:
+        report_rate = '선택하지 않음'
     if (
         report_rate not in parser.text
         or f"({behavior.get('matched', 0)}/{behavior.get('denominator', 0)})" not in document
@@ -3014,6 +3187,9 @@ def verification_artifacts(window):
         "gui_match_rate": displayed.text(2),
         "report_links": len(parser.references),
         "broken_report_links": sorted(missing),
+        'analysis_mode': run.get('analysis_mode'),
+        'ai_mode': run.get('ai_mode'),
+        'analysis_status': run.get('analysis_status', {}),
     }
 
 
@@ -3025,7 +3201,12 @@ def start_verification_scenario(app, window, scenario):
     window.original.set_path(scenario["original"])
     window.reimplementation.set_path(scenario["reimplementation"])
     window.tests_editor.setPlainText(dump(scenario["tests"]))
-    window.mode.setCurrentIndex(0)
+    requested_scope = scenario.get('analysis_mode', 'both')
+    requested_ai = scenario.get('ai_mode', 'explain')
+    window.analysis_mode.setCurrentIndex(window.analysis_mode.findData(requested_scope))
+    window.ai_explanation.setChecked(requested_ai != 'off')
+    window.mode.setCurrentIndex(window.mode.findData('agent' if requested_ai == 'agent' else 'automatic'))
+    window.run_result = {}
     window.navigation.setCurrentRow(1)
     state = {
         "started": False,
@@ -3050,6 +3231,12 @@ def start_verification_scenario(app, window, scenario):
             "run_id": result.get("run_id"),
             "attempt_id": result.get("attempt_id"),
             "status": result.get("status", "failed"),
+            'requested_analysis_mode': requested_scope,
+            'requested_ai_mode': requested_ai,
+            'analysis_mode': result.get('analysis_mode'),
+            'ai_mode': result.get('ai_mode'),
+            'analysis_status': result.get('analysis_status', {}),
+            'preflight': window.analysis_setup.state,
             "stages": result.get("stages", {}),
             "model": window.settings.model,
             "llm_status": result.get("llm", {}).get("status"),
@@ -3069,6 +3256,9 @@ def start_verification_scenario(app, window, scenario):
             if result:
                 try:
                     summary["artifact_checks"] = verification_artifacts(window)
+                    for key, expected in (('analysis_mode', requested_scope), ('ai_mode', requested_ai)):
+                        if key in scenario and result.get(key) != expected:
+                            raise ValueError(f'요청한 검증 옵션과 저장 결과가 다릅니다: {key}')
                 except Exception as exc:
                     summary["artifact_error"] = str(exc)
                     success = False
@@ -3096,10 +3286,16 @@ def start_verification_scenario(app, window, scenario):
                 return
             state["started"] = True
             if not state["timeout"]:
+                if not window.grab().save(str(output / 'scenario-setup.png')):
+                    window.show_error('검증 준비 화면을 저장하지 못했습니다.')
+                    state['finishing'] = True
+                    timer.stop()
+                    QTimer.singleShot(0, finish)
+                    return
                 # The public GUI handler validates, saves settings, and starts the shared engine.
                 window.start_analysis()
             return
-        if window.worker and window.worker.isRunning():
+        if window._task_join_pending or (window.worker and window.worker.isRunning()):
             return
         state["finishing"] = True
         timer.stop()
