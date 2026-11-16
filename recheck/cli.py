@@ -157,6 +157,64 @@ def result_code(result):
     )
 
 
+SETUP_DIAGNOSTICS = {
+    'docker_not_installed': ('Docker Desktop을 찾지 못했습니다.',
+                             ['도구 설치·관리에서 Docker Desktop을 설치하세요.',
+                              'Docker Desktop을 실행한 뒤 분석 환경 준비를 다시 누르세요.']),
+    'docker_engine_unavailable': ('Docker 엔진에 연결하지 못했습니다.',
+                                  ['Docker Desktop을 실행하고 Linux 컨테이너가 준비될 때까지 기다리세요.',
+                                   '선택한 Docker context와 연결 상태를 다시 확인하세요.']),
+    'docker_remote_context': ('관리 분석 환경에는 로컬 Docker 연결이 필요합니다.',
+                              ['분석 설정에서 로컬 Docker context를 선택하세요.',
+                               'Docker Desktop의 연결 상태를 확인하고 환경 준비를 다시 실행하세요.']),
+    'docker_linux_x64_required': ('Linux x64 Docker 환경이 필요합니다.',
+                                 ['Docker Desktop을 Linux 컨테이너 모드로 전환하세요.',
+                                  '로컬 엔진의 운영체제·아키텍처를 확인하세요.']),
+    'runtime_prepare_failed': ('분석 환경을 준비하지 못했습니다.',
+                               ['도구 설치·관리에서 Docker와 배포 파일의 준비 상태를 확인하세요.',
+                                '최초 실패 기록을 보존하고 분석 환경 준비를 다시 실행하세요.']),
+    'runtime_prepare_cancelled': ('분석 환경 준비를 중단했습니다.',
+                                  ['취소 시점의 준비 상태를 확인하세요.', '필요할 때 분석 환경 준비를 다시 실행하세요.']),
+}
+
+
+def preparation_diagnostic(result):
+    """Derive an allowlisted cause; never echo setup stderr or private paths."""
+    if not result_code(result):
+        return result
+    environment = result.get('environment') if isinstance(result.get('environment'), dict) else {}
+    if result.get('status') == 'cancelled':
+        code = 'runtime_prepare_cancelled'
+    elif environment.get('status') == 'not_installed':
+        code = 'docker_not_installed'
+    elif environment.get('ready') is False:
+        code = 'docker_engine_unavailable'
+    elif environment.get('local_endpoint') is False:
+        code = 'docker_remote_context'
+    elif (environment.get('os') not in (None, 'linux')
+          or environment.get('arch') not in (None, 'amd64', 'x86_64')):
+        code = 'docker_linux_x64_required'
+    else:
+        code = 'runtime_prepare_failed'
+    message, actions = SETUP_DIAGNOSTICS[code]
+    return dict(result, code=code, message=message, next_actions=list(actions))
+
+
+def regression_result_summary(run):
+    """CLI rechecks expose outcomes, not stored inputs, profiles or raw outputs."""
+    regression = run.get('regression') or {}
+    summary = {key: regression.get(key) for key in ('suite_id', 'source_run_id', 'reference_changed')}
+    summary['policy'] = 'pair_equivalence'
+    summary['counts'] = {key: value for key, value in (regression.get('counts') or {}).items()
+                          if key in ('resolved', 'still_different', 'unmeasured') and type(value) is int}
+    summary['case_results'] = [
+        {key: row.get(key) for key in ('test_id', 'status', 'saved_input_reproduced')}
+        for row in regression.get('case_results', []) if isinstance(row, dict)
+    ]
+    return dict(status=run.get('status'), run_id=run.get('run_id'),
+                analysis_status=run.get('analysis_status'), regression=summary)
+
+
 def public_result(result):
     if not result_code(result):
         return result
@@ -171,11 +229,26 @@ def public_result(result):
     summary = dict(
         status=result['status'],
         code=code,
-        message='작업이 완료되지 않았습니다. 저장된 보고서와 상태 코드를 확인하세요.',
+        message='작업이 완료되지 않았습니다. 실패 단계와 상태 코드를 확인하세요.',
     )
+    if code in SETUP_DIAGNOSTICS:
+        summary['message'], actions = SETUP_DIAGNOSTICS[code]
+        summary['next_actions'] = list(actions)
     for key in ('run_id', 'workflow_id', 'report', 'comparison_report', 'directory'):
         if isinstance(result.get(key), str):
-            summary[key] = result[key]
+            if key not in ('report', 'comparison_report') or Path(result[key]).is_file():
+                summary[key] = result[key]
+    if isinstance(result.get('analysis_result_status'), str):
+        summary['analysis_result_status'] = result['analysis_result_status']
+    if isinstance(result.get('analysis_status'), dict):
+        summary['analysis_status'] = {key: value for key, value in result['analysis_status'].items()
+                                      if key in ('static', 'dynamic', 'ai') and isinstance(value, str)}
+    operation = result.get('last_operation')
+    if isinstance(operation, dict):
+        summary['operation'] = {key: value for key, value in operation.items()
+                                if key in ('operation_id', 'kind', 'status', 'error_code') and isinstance(value, str)}
+    if isinstance(result.get('regression'), dict):
+        summary['regression'] = regression_result_summary(result)['regression']
     return summary
 
 
@@ -327,6 +400,21 @@ def _parser():
             item.add_argument('--scope', action='append', default=[])
             item.add_argument('--project-id', default='')
     sub.add_parser('history')
+    regression_save = sub.add_parser('regression-save', help='저장된 불일치·미측정 입력을 회귀 테스트로 보관')
+    regression_save.add_argument('run_id')
+    regression_save.add_argument('--test-id', action='append', dest='test_ids')
+    regression_save.add_argument('--name', default='')
+    sub.add_parser('regression-list', help='보관한 문제 입력 목록; 새 실행 없음')
+    regression_run = sub.add_parser('regression-run', help='보관한 입력으로 새 동적분석; AI 호출 없음')
+    regression_run.add_argument('suite_id')
+    regression_run.add_argument('--original', required=True)
+    regression_run.add_argument('--reimplementation', required=True)
+    failure = sub.add_parser('failure-report', help='저장된 실패·차이 항목만 별도 보고서로 저장; 새 실행 없음')
+    failure.add_argument('run_id')
+    failure.add_argument('--output', required=True)
+    failure.add_argument('--format', choices=('html', 'json'), default='html')
+    failure.add_argument('--include-observations', action='store_true',
+                         help='입력·출력 원문 포함; 민감 정보가 있을 수 있으므로 공유 전 검토')
     inspect = sub.add_parser('inspect')
     inspect.add_argument('path')
     package = sub.add_parser('compare-package', help='ZIP 구성 파일 비교; 추출·실행·AI 호출 없음')
@@ -368,6 +456,26 @@ def _parser():
 
 
 def _execute(args, cancel):
+    if args.command in ('regression-save', 'regression-list'):
+        from .regression import RegressionLibrary
+
+        library = RegressionLibrary(args.data_dir)
+        if args.command == 'regression-list':
+            return library.list_suites()
+        suite = library.save_from_run(args.run_id, test_ids=args.test_ids, name=args.name)
+        return dict(status='success', suite_id=suite['suite_id'], name=suite['name'],
+                    source_run_id=suite['source_run_id'], case_count=len(suite['tests']))
+    if args.command == 'failure-report':
+        from .storage import Store
+        from .failure_report import build_failure_report, export_failure_report
+
+        run = Store(args.data_dir).load_run(args.run_id)
+        path = export_failure_report(run, args.output, format=args.format,
+                                     include_observations=args.include_observations)
+        summary = build_failure_report(run)
+        return dict(status='success', run_id=args.run_id, report=str(path),
+                    issue_count=summary['issue_count'], counts=summary['counts'],
+                    observations_included=args.include_observations)
     if args.command == 'compare-package':
         from .package_comparison import compare_packages
 
@@ -379,9 +487,9 @@ def _execute(args, cancel):
     if args.command == 'prepare-tools':
         from .runtime_source import build_analysis_environment
 
-        return asyncio.run(build_analysis_environment(
+        return preparation_diagnostic(asyncio.run(build_analysis_environment(
             _selected_settings(args), cancel=cancel, include_ollama=args.include_local_ai,
-        ))
+        )))
     if args.command == 'ai':
         return _ai_result(args, cancel)
     if args.command == 'inspect':
@@ -392,6 +500,9 @@ def _execute(args, cancel):
         result = asyncio.run(engine.environment(cancel))
     elif command == 'history':
         result = engine.store.list_runs()
+    elif command == 'regression-run':
+        run = asyncio.run(engine.recheck_regression(args.suite_id, args.original, args.reimplementation, cancel))
+        result = regression_result_summary(run)
     elif command == 'analyze':
         scope = args.analysis_mode or (args.mode if args.mode in ('static', 'dynamic') else 'both')
         if args.analysis_mode is not None and scope != 'static' and not args.tests:
@@ -434,6 +545,11 @@ def _execute(args, cancel):
         )
     elif command in ('recover', 'reinterpret'):
         result = asyncio.run(getattr(engine, command)(args.run_id, cancel))
+        if command == 'reinterpret' and isinstance(result.get('last_operation'), dict):
+            operation = result['last_operation']
+            result = dict(result, analysis_result_status=result['status'], status=operation['status'])
+            if operation.get('error_code'):
+                result['code'] = operation['error_code']
     elif command == 'report':
         result = str(engine.report(args.run_id))
     else:

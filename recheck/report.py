@@ -104,16 +104,20 @@ def render_report(run, destination):
                     )
         return ' · '.join(links.values())
 
-    behavior = run.get('behavior', {})
+    from .review_views import verified_behavior
+    behavior = verified_behavior(run)
     scope = analysis_scope_summary(run)
     rate = behavior.get('match_rate')
     rate_text = f'{rate*100:.2f}%' if isinstance(rate, (int, float)) else '미측정'
+    matched_text = str(behavior['matched']) if type(behavior['matched']) is int else '?'
+    if behavior['denominator'] and behavior['matched'] is None:
+        rate_text = '판정 미확인'
     observation_scope = behavior.get('scope', '등록하여 실행한 입력 범위에서만 확인한 결과')
     if scope['dynamic'] == 'not_requested':
         rate_text = '선택하지 않음'
         observation_scope = '파일에서 수집한 정적 근거만 확인한 결과 · 실행 동작 미검증'
     pieces = [
-        f"<section><h2>{esc(run['run_id'])}</h2><p>실행 상태: <b>{esc(status_label(run['status']))}</b> · 동작 일치율: <b>{rate_text}</b> ({behavior.get('matched',0)}/{behavior.get('denominator',0)})</p><p>{esc(observation_scope)}</p><small>실측 수치·상태 생성: Recheck. 불일치가 발견되어도 분석 절차가 모두 끝나면 실행 상태는 성공입니다.</small></section>"
+        f"<section><h2>{esc(run['run_id'])}</h2><p>실행 상태: <b>{esc(status_label(run['status']))}</b> · 동작 일치율: <b>{rate_text}</b> ({matched_text}/{behavior['denominator']})</p><p>{esc(observation_scope)}</p><small>실측 수치·상태 생성: Recheck. 불일치가 발견되어도 분석 절차가 모두 끝나면 실행 상태는 성공입니다.</small></section>"
     ]
     scope_names = {'static': '정적분석', 'dynamic': '동적분석', 'both': '둘 다 분석'}
     ai_names = {'off': '사용 안 함', 'explain': '결과 설명', 'agent': '결과 설명 + AI 추가 확인'}
@@ -146,6 +150,22 @@ def render_report(run, destination):
         '<p>각 분석의 성공은 선택한 절차의 완료를 뜻합니다. '
         '동작의 일치 여부는 실제로 측정한 입력별 결과에서 확인하세요.</p></section>'
     )
+    from .review_views import coverage_section, regression_section
+    from .failure_report import build_failure_report, CATEGORY_LABELS
+    pieces.append(coverage_section(run))
+    pieces.append(regression_section(run))
+    failure = build_failure_report(run)
+    pieces.append('<section><h2>별도 실패 항목 보고서</h2><p>결과 화면의 실패 항목 탭에서 '
+                  '문제별 원인·다음 조치와 HTML/JSON 내보내기를 확인할 수 있습니다.</p><ul>')
+    for category, label in CATEGORY_LABELS.items():
+        pieces.append('<li>' + esc(label) + ': ' + str(failure['counts'][category]) + '</li>')
+    pieces.append('</ul><p>동작 차이·미측정·근거 수집 미완료는 서로 다른 범주입니다.</p></section>')
+    operation = run.get('last_operation') or {}
+    if operation.get('kind') == 'reinterpret':
+        pieces.append('<section><h2>최근 AI 설명 요청</h2><p>기존 분석 상태: '
+                      + esc(status_label(run.get('status'))) + ' · 추가 요청 상태: '
+                      + esc(status_label(operation.get('status'))) + '</p><p>원인 코드: '
+                      + esc(operation.get('error_code', '없음')) + '</p></section>')
     environment = run.get('environment', {})
     structure = run.get('structure') or {}
     if structure.get('analysis_kind') == 'managed':

@@ -1,6 +1,7 @@
 """Controlled evidence/linking fixtures; no external tools or target execution."""
 
 import asyncio
+import base64
 import copy
 import json
 from html.parser import HTMLParser
@@ -34,7 +35,9 @@ def record():
             actual_input=test,
             status='success',
             stdout=str(value),
+            stdout_b64=base64.b64encode(str(value).encode()).decode(),
             stderr='',
+            stderr_b64='',
             exit_code=0,
             evidence_id='ev-' + target,
         )
@@ -79,6 +82,7 @@ def record():
         attempt_id='attempt_fixture',
         status='success',
         files={},
+        settings=dict(normalize_newlines=False, trim_trailing_whitespace=False),
         tests=[test],
         static={target: {'functions': [fn]} for target, fn in functions.items()},
         structure=structure,

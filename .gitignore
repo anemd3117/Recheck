@@ -23,6 +23,7 @@ build/
 
 # Share reviewed guides; machine-specific diagnostics and historical QA stay local.
 /docs/*
+!/docs/REVIEW_AND_RECHECK.md
 !/docs/ANALYSIS_MODES.md
 !/docs/GEMINI_FREE_SETUP.md
 !/docs/PACKAGE_COMPARISON.md

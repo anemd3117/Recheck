@@ -370,6 +370,7 @@ def test_launch_entrypoint_preserves_main_failure_exit_code():
 @pytest.fixture
 def persisted_gui_result(window, tmp_path):
     import json
+    import base64
     from recheck.report import render_report
 
     run = {
@@ -401,6 +402,13 @@ def persisted_gui_result(window, tmp_path):
         ],
         "evidence": [],
     }
+    run['tests'] = [{'id': 'boundary', 'args': ['4']}]
+    run['settings'] = dict(normalize_newlines=False, trim_trailing_whitespace=False)
+    for row in run['dynamic']:
+        for side in ('original', 'reimplementation'):
+            observation = row[side]
+            observation.update(status='success', stdout_b64=base64.b64encode(observation['stdout'].encode()).decode(),
+                               stderr_b64='')
     folder = tmp_path / "runs" / run["run_id"]
     folder.mkdir(parents=True)
     (folder / "result.json").write_text(json.dumps(run), encoding="utf-8")

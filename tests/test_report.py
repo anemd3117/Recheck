@@ -1,6 +1,7 @@
 """Offline report content and provenance checks using controlled records."""
 
 import copy
+import base64
 
 from recheck.report import render_report
 
@@ -98,6 +99,11 @@ def test_report_readable_reproduction_preserves_observed_records_and_escapes_dat
             }
         ],
     }
+    record['settings']['trim_trailing_whitespace'] = False
+    for row in record['dynamic']:
+        for side in ('original', 'reimplementation'):
+            observation = row[side]
+            observation.update(stdout_b64=base64.b64encode(observation['stdout'].encode()).decode(), stderr_b64='')
     before = copy.deepcopy(record)
     document = render_report(record, tmp_path / "보고서.html").read_text(encoding="utf-8")
     assert record == before

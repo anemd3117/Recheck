@@ -198,7 +198,7 @@ def assessment_material(tmp_path):
         attempt_id=new_id('attempt'),
         status='success',
         mode='automatic',
-        settings={},
+        settings=Settings().model_dump(),
         static={},
         tests=copy.deepcopy(sample['tests']),
         events=[],

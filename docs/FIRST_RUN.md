@@ -2,7 +2,7 @@
 
 ## 배포 ZIP으로 실행
 
-1. [1.2.4 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v1.2.4-prototype.1/Recheck-1.2.4-prototype.1-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.4-prototype.1)도 확인하세요.
+1. [1.2.5 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v1.2.5-prototype.1/Recheck-1.2.5-prototype.1-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.5-prototype.1)도 확인하세요.
 2. ZIP의 압축을 모두 풉니다.
 3. `Recheck` 폴더의 **`Recheck.exe`**를 실행합니다. 같은 위치의 `_internal` 폴더도 함께 유지하세요.
 
@@ -19,6 +19,8 @@ GPT는 추천 선택으로 유지합니다. **ChatGPT로 연결하고 자동 설
 **프로그램 비교** 화면에서 **정적분석·동적분석·둘 다 분석**을 선택합니다. 기본은 둘 다 분석이며 **AI 설명 사용**은 별도로 끌 수 있습니다. 정적분석만 선택하면 실행 입력은 숨겨지고, 동적분석만 선택하면 정적 도구는 필요하지 않습니다. **필요 도구 확인**에서 현재 선택에 맞는 준비 상태를 확인하고 **도구 설치·준비 안내**로 이어가세요. 시작 전에 같은 조건을 다시 확인합니다.
 
 도구가 없으면 안내를 따라 준비하며, 파일 형식의 지원 제한은 설치 문제와 따로 표시됩니다. 지원하지 않는 Windows 실행을 Docker 설치로 해결할 수 있다고 안내하지 않습니다. 분석 모드를 직접 바꿔 정적 근거만 확인할 수 있습니다. 자세한 내용은 [분석 모드 안내](ANALYSIS_MODES.md)를 참고하세요.
+
+결과에서 **확인 범위**로 실제 관측·미수집을 살펴보고, **문제 입력 저장 → 재검사 보관함**으로 같은 입력을 다시 검사할 수 있습니다. 실패한 항목은 **실패 항목 보고서**에서 원인·조치를 확인하고 별도 HTML/JSON으로 내보냅니다. [확인 범위·재검사 안내](REVIEW_AND_RECHECK.md)를 참고하세요.
 
 ## AI 없이 ZIP 구성부터 비교하기
 

@@ -231,6 +231,8 @@ class MainWindow(QMainWindow):
         self.task_buttons: list[QPushButton] = []
         self.run_result: dict = {}
         self.workflow_result: dict = {}
+        self._regression_suite_id = None
+        self._regression_policy = {}
         self.capabilities_result: dict = {}
         self.models_loaded = False
         self.last_environment: dict = {}
@@ -630,6 +632,15 @@ class MainWindow(QMainWindow):
             open_settings=self.open_analysis_settings,
         )
         scope_box.addWidget(self.analysis_setup)
+        self.regression_request = QWidget()
+        regression_request_box = QHBoxLayout(self.regression_request)
+        regression_request_box.setContentsMargins(0, 0, 0, 0)
+        self.regression_request_label = QLabel()
+        self.regression_request_label.setWordWrap(True)
+        regression_request_box.addWidget(self.regression_request_label, 1)
+        self.button('일반 비교로 전환', self.clear_regression_selection, regression_request_box, False)
+        self.regression_request.hide()
+        scope_box.addWidget(self.regression_request)
         box.addWidget(self.analysis_scope_panel)
         files = QHBoxLayout()
         self.original = FileCard("1. 기존 프로그램 (원본)")
@@ -817,6 +828,10 @@ class MainWindow(QMainWindow):
         self.result_title.setWordWrap(True)
         self.result_title.setObjectName("muted")
         box.addWidget(self.result_title)
+        self.coverage_brief = QLabel('수집 범위를 확인할 결과를 선택하세요.')
+        self.coverage_brief.setWordWrap(True)
+        self.coverage_brief.setTextFormat(Qt.TextFormat.PlainText)
+        box.addWidget(self.coverage_brief)
         stats = QHBoxLayout()
         self.result_cards = {}
         for key, title in [
@@ -836,6 +851,13 @@ class MainWindow(QMainWindow):
         self.button("AI가 추천한 입력 추가", self.register_suggestions, actions, False)
         actions.addStretch()
         box.addLayout(actions)
+        review_actions = QHBoxLayout()
+        self.button('확인한 범위', self.open_coverage, review_actions, False)
+        self.button('실패 항목 보고서', self.open_failure_report, review_actions, False)
+        self.button('문제 입력 저장', self.save_regression, review_actions)
+        self.button('재검사 보관함', self.open_regression_library, review_actions, False)
+        review_actions.addStretch()
+        box.addLayout(review_actions)
         secondary = QHBoxLayout()
         self.button("문제가 생긴 단계 다시 시도", self.recover, secondary)
         self.button("문제 확인용 파일 저장", self.export_diagnostics, secondary, False)
@@ -930,6 +952,18 @@ class MainWindow(QMainWindow):
         )
         wb.addWidget(self.workflow_view)
         self.result_tabs.addTab(self.workflow_panel, "프로그램 개선 작업")
+        from .review_ui import CoveragePanel, FailureReportPanel, RegressionPanel
+        self.coverage_panel = CoveragePanel(self)
+        self.failure_panel = FailureReportPanel(self)
+        self.failure_panel.notice.connect(self.notice)
+        self.failure_panel.error.connect(self.show_error)
+        self.regression_panel = RegressionPanel(self)
+        self.regression_panel.refresh_requested.connect(self.refresh_regression_library)
+        self.regression_panel.load_requested.connect(self.prepare_regression)
+        self.regression_panel.error.connect(self.show_error)
+        self.result_tabs.addTab(self.coverage_panel, '확인 범위')
+        self.result_tabs.addTab(self.failure_panel, '실패 항목')
+        self.result_tabs.addTab(self.regression_panel, '재검사 보관함')
         box.addWidget(self.result_tabs, 1)
         return page
 
@@ -939,6 +973,7 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         self.button("목록 새로고침", self.refresh_history, row, False)
         self.button("선택한 비교 결과 열기", self.open_history, row, False)
+        self.button('재검사 보관함', self.open_regression_library, row, False)
         row.addStretch()
         box.addLayout(row)
         self.history = QTreeWidget()
@@ -1573,6 +1608,8 @@ class MainWindow(QMainWindow):
 
     def product_mode_changed(self, *_):
         product = self.product_mode.currentData()
+        if product != 'comparison' and self._regression_suite_id:
+            self.clear_regression_selection()
         comparison = product == "comparison"
         package = product == 'package'
         previous_package_mode = self.original.inventory_mode
@@ -1605,6 +1642,7 @@ class MainWindow(QMainWindow):
         )
         self.refresh_start_guide()
         self.analysis_scope_changed()
+        self.sync_regression_selection()
 
     def ai_explanation_changed(self, enabled):
         self.mode.setEnabled(enabled)
@@ -1615,6 +1653,8 @@ class MainWindow(QMainWindow):
             return
         comparison = self.product_mode.currentData() == 'comparison'
         scope = self.analysis_mode.currentData()
+        if self._regression_suite_id and scope != 'dynamic':
+            self.clear_regression_selection()
         if comparison:
             self.inputs_group.setVisible(scope != 'static')
             self.analysis_note.setText({
@@ -1812,6 +1852,7 @@ class MainWindow(QMainWindow):
         ):
             control.setEnabled(True)
         self.product_mode_changed()
+        self.sync_regression_selection()
         if hasattr(self, "performance_panel"):
             self.performance_panel.set_busy(False)
             self.performance_panel._benchmark_active = False
@@ -2353,19 +2394,25 @@ class MainWindow(QMainWindow):
         ai_mode = ('off' if not self.ai_explanation.isChecked() else
                    'agent' if mode == 'agent' else 'explain')
         paths = (original, rebuilt)
+        suite_id = self._regression_suite_id
+        saved_policy = dict(self._regression_policy)
         self.stages.clear()
         self.stage_items = {}
         self.agent_view.clear()
         self.stage_section.findChild(QPushButton).setChecked(True)
         async def work(settings, cancel, emit):
-            preflight = await self.analysis_preflight(settings, cancel, emit, scope, paths)
+            effective = settings.model_copy(update=saved_policy) if suite_id else settings
+            preflight = await self.analysis_preflight(effective, cancel, emit, scope, paths)
             if cancel.is_set():
                 preflight['cancelled'] = True
             if not preflight.get('can_analyze') or cancel.is_set():
                 return dict(preflight=preflight, result=None)
-            result = await self.engine_for(settings, emit).analyze(
-                original, rebuilt, tests, mode=mode, cancel=cancel,
-                analysis_mode=scope, ai_mode=ai_mode)
+            engine = self.engine_for(effective, emit)
+            if suite_id:
+                result = await engine.recheck_regression(suite_id, original, rebuilt, cancel=cancel)
+            else:
+                result = await engine.analyze(original, rebuilt, tests, mode=mode, cancel=cancel,
+                                              analysis_mode=scope, ai_mode=ai_mode)
             return dict(preflight=preflight, result=result)
 
         def done(outcome):
@@ -2374,6 +2421,91 @@ class MainWindow(QMainWindow):
                 self.show_result(outcome['result'])
 
         self.launch_task('선택한 분석 준비·진행 중', work, done)
+
+    def open_coverage(self):
+        self.navigation.setCurrentRow(2)
+        self.result_tabs.setCurrentWidget(self.coverage_panel)
+
+    def open_failure_report(self):
+        if self.selected_run_id():
+            self.navigation.setCurrentRow(2)
+            self.result_tabs.setCurrentWidget(self.failure_panel)
+
+    def open_regression_library(self):
+        self.result_empty.hide()
+        self.result_content.show()
+        self.navigation.setCurrentRow(2)
+        self.result_tabs.setCurrentWidget(self.regression_panel)
+        self.after_current_task(self.refresh_regression_library)
+
+    def refresh_regression_library(self):
+        from .regression import RegressionLibrary
+        library = RegressionLibrary(self.engine.store.root)
+
+        async def read(settings, cancel, emit):
+            return await asyncio.to_thread(library.list_suites)
+        self.launch_task('재검사 보관함 확인 중', read, self.regression_panel.set_suites)
+
+    def save_regression(self):
+        run_id = self.selected_run_id()
+        if not run_id:
+            return
+        from .regression import RegressionLibrary
+        library = RegressionLibrary(self.engine.store.root)
+
+        async def save(settings, cancel, emit):
+            return await asyncio.to_thread(library.save_from_run, run_id)
+
+        def saved(suite):
+            self.regression_panel.set_suites([suite])
+            self.result_tabs.setCurrentWidget(self.regression_panel)
+            self.notice(f'문제 입력 {len(suite["tests"])}개를 보관했습니다. 같은 입력으로 새 비교를 만들 수 있습니다.')
+        self.launch_task('차이·미측정 입력 저장 중', save, saved)
+
+    def prepare_regression(self, suite_id):
+        from .regression import RegressionLibrary
+        library = RegressionLibrary(self.engine.store.root)
+
+        async def prepare(settings, cancel, emit):
+            def load():
+                return library.load_suite(suite_id), library.prepare_tests(suite_id)
+            return await asyncio.to_thread(load)
+
+        def prepared(data):
+            suite, tests = data
+            self.clear_regression_selection()
+            self.product_mode.setCurrentIndex(self.product_mode.findData('comparison'))
+            self.analysis_mode.setCurrentIndex(self.analysis_mode.findData('dynamic'))
+            self.ai_explanation.setChecked(False)
+            self.tests_editor.setPlainText(dump(tests))
+            for target, card in [('original', self.original), ('reimplementation', self.reimplementation)]:
+                card.path.setText(suite.get('source_files', {}).get(target, {}).get('path', ''))
+                card.inspect()
+            self._regression_suite_id = suite_id
+            self._regression_policy = dict(suite['comparison_policy'])
+            self.regression_request_label.setText(
+                f'문제 입력 {len(tests)}개와 저장한 출력 비교 정책으로 재검사합니다. '
+                '원본·수정본 파일을 확인하세요. 기존 분석과 개인 설정은 유지합니다.')
+            self.sync_regression_selection()
+            self.navigation.setCurrentRow(1)
+            self.notice('입력을 불러왔습니다. 비교할 두 파일을 확인하고 시작하세요.')
+        self.launch_task('재검사 입력 검증 중', prepare, prepared)
+
+    def clear_regression_selection(self):
+        self._regression_suite_id = None
+        self._regression_policy = {}
+        self.sync_regression_selection()
+
+    def sync_regression_selection(self):
+        if not hasattr(self, 'inputs_group') or not hasattr(self, 'regression_request'):
+            return
+        pending = bool(self._regression_suite_id)
+        running = self._task_join_pending or bool(self.worker and self.worker.isRunning())
+        self.regression_request.setVisible(pending)
+        self.inputs_group.setEnabled(not pending)
+        self.analysis_mode.setEnabled(not running and not pending)
+        self.ai_explanation.setEnabled(not running and not pending)
+        self.mode.setEnabled(not running and not pending and self.ai_explanation.isChecked())
 
     def start_package_comparison(self):
         if self._task_join_pending or (self.worker and self.worker.isRunning()):
@@ -2483,6 +2615,10 @@ class MainWindow(QMainWindow):
             self.result_title.setText(
                 f"작업 {workflow.get('workflow_id', '?')} · {status_label(workflow.get('status'))}\n아직 실행 파일 비교가 생성되지 않았습니다."
             )
+        if not self.run_result:
+            self.coverage_brief.setText('현재 작업에는 확인할 비교 결과가 없습니다.')
+            self.coverage_panel.set_run({})
+            self.failure_panel.set_run({})
         self.workflow_result = workflow
         self.workflow_view.setPlainText(dump(workflow))
         if comparison_id and self.run_result:
@@ -2510,6 +2646,8 @@ class MainWindow(QMainWindow):
         self.result_empty.hide()
         self.result_content.show()
         self.run_result = result
+        from .review_views import verified_behavior
+        displayed_behavior = verified_behavior(result)
         self.refresh_start_guide()
         self.update_result_cards(result)
         self.workflow_result = result.get("reconstruction", {})
@@ -2532,7 +2670,7 @@ class MainWindow(QMainWindow):
             + status_label(result.get('status'))
             + (
                 '\n등록한 입력으로 확인한 결과입니다. 다른 입력의 동작은 추가 검사가 필요합니다.'
-                if (result.get('behavior') or {}).get('denominator', 0)
+                if displayed_behavior['denominator']
                 else '\n실행 결과는 측정하지 않았습니다. 함수·구조 비교와 단계별 상태를 확인하세요.'
             )
         )
@@ -2544,9 +2682,17 @@ class MainWindow(QMainWindow):
             + scope_names.get(scope['analysis_mode'], '분석 범위 미기록') + ' · '
             + ' / '.join(name + ': ' + status_label(scope[key])
                          for key, name in [('static', '정적분석'), ('dynamic', '동적분석'), ('ai', 'AI 설명')])
-            + (' · 동작 미검증' if not (result.get('behavior') or {}).get('denominator') else '')
+            + (' · 동작 미검증' if not displayed_behavior['denominator'] else '')
         )
         self.result_title.setToolTip('기록 번호: ' + run_id)
+        operation = result.get('last_operation') or {}
+        if operation.get('kind') == 'reinterpret':
+            self.result_title.setText(self.result_title.text() + '\n최근 AI 설명 요청: '
+                                      + status_label(operation.get('status')))
+        from .review_views import coverage_brief
+        self.coverage_brief.setText(coverage_brief(result))
+        self.coverage_panel.set_run(result)
+        self.failure_panel.set_run(result)
         self.result_summary.setPlainText(
             dump(
                 {
@@ -2584,27 +2730,30 @@ class MainWindow(QMainWindow):
         self.notice("분석 결과를 저장했습니다. 미완료 단계와 검증 상태를 함께 확인하세요.")
 
     def update_result_cards(self, result):
-        behavior = result.get('behavior') or {}
+        from .review_views import verified_behavior
+        behavior = verified_behavior(result)
         denominator = behavior.get('denominator', 0)
-        matched = behavior.get('matched', 0)
+        matched = behavior.get('matched')
         mismatches = sum(test.get('match') is False for test in behavior.get('tests', []))
-        registered = behavior.get('registered', len(result.get('tests', []))) or denominator
+        registered = behavior.get('registered') or denominator
         unmeasured = max(0, registered - denominator)
         detail = f'비교할 수 있었던 입력 {denominator}개 기준'
+        if denominator and matched is None:
+            detail = f'원시 관찰 {denominator}개 · 출력 비교 정책 미확인'
         if unmeasured:
             detail += f' · 확인하지 못한 입력 {unmeasured}개'
         self.result_cards['match'].update_value(
-            f'{matched / denominator * 100:.1f}%' if denominator else '—',
+            f'{behavior["match_rate"] * 100:.1f}%' if behavior['match_rate'] is not None else '—',
             detail if denominator else '아직 비교할 수 있는 결과가 없습니다',
             'success' if denominator and matched == denominator else 'neutral',
         )
         self.result_cards['matched'].update_value(
-            f'{matched}개' if denominator else '—',
+            f'{matched}개' if denominator and matched is not None else '—',
             '같은 출력과 종료 결과',
             'success' if matched else 'neutral',
         )
         self.result_cards['mismatched'].update_value(
-            f'{mismatches}개' if denominator else '—',
+            f'{mismatches}개' if denominator and matched is not None else '—',
             '아래 결과에서 해당 입력을 확인하세요',
             'warning' if mismatches else 'neutral',
         )
@@ -2705,13 +2854,14 @@ class MainWindow(QMainWindow):
         ):
             for fid in structure.get(target, []):
                 add(structure_root, [title, fid, "", "추가 검증 필요"], {"function_id": fid})
-        behavior = result.get("behavior", {})
+        from .review_views import verified_behavior
+        behavior = verified_behavior(result)
         rate = behavior.get("match_rate")
         dynamic_root = add(
             None,
             [
                 "입력별 동작 비교",
-                f"{behavior.get('matched', 0)} / {behavior.get('denominator', 0)}",
+                f"{behavior['matched'] if type(behavior['matched']) is int else '?'} / {behavior['denominator']}",
                 f"{rate * 100:.1f}%" if isinstance(rate, (float, int)) else "미측정",
                 "일치한 유효 쌍 / 수집된 유효 쌍",
             ],
@@ -2926,19 +3076,22 @@ class MainWindow(QMainWindow):
             self.notice(f"이력을 읽을 수 없습니다: {exc}")
 
     def open_history(self):
-        item = self.history.currentItem()
-        if item:
-            try:
-                if item.data(1, Qt.ItemDataRole.UserRole):
-                    self.show_workflow_result(
-                        self.engine.store.load_workflow(item.data(0, Qt.ItemDataRole.UserRole))
-                    )
-                else:
-                    self.show_result(
-                        self.engine.store.load_run(item.data(0, Qt.ItemDataRole.UserRole))
-                    )
-            except Exception as exc:
-                self.show_error(str(exc))
+        selected = self.history.selectedItems()
+        if len(selected) != 1:
+            self.notice('열어 볼 분석 이력을 하나 선택하세요.')
+            return
+        item = selected[0]
+        try:
+            if item.data(1, Qt.ItemDataRole.UserRole):
+                self.show_workflow_result(
+                    self.engine.store.load_workflow(item.data(0, Qt.ItemDataRole.UserRole))
+                )
+            else:
+                self.show_result(
+                    self.engine.store.load_run(item.data(0, Qt.ItemDataRole.UserRole))
+                )
+        except Exception as exc:
+            self.show_error(str(exc))
 
     def read_run_log(self):
         rid = self.selected_run_id()
@@ -3487,6 +3640,17 @@ def main():
     performance = None
     setup_output = None
     package_scenario = None
+    review_scenario = None
+    if '--verify-review' in sys.argv:
+        try:
+            if any(flag in sys.argv for flag in ('--smoke-test', '--verify-package', '--verify-setup',
+                                                 '--verify-performance', '--verify-scenario')):
+                raise ValueError('검증 모드는 하나씩 선택하세요.')
+            from .review_verification import load_review_scenario
+            review_scenario = load_review_scenario(sys.argv[sys.argv.index('--verify-review') + 1])
+        except Exception as exc:
+            print('결과 검토 검증 설정 오류:', exc, file=sys.stderr)
+            return 1
     if '--verify-package' in sys.argv:
         try:
             config_path = Path(sys.argv[sys.argv.index('--verify-package') + 1]).resolve(strict=True)
@@ -3531,9 +3695,12 @@ def main():
         except Exception as exc:
             print("검증 시나리오 설정 오류:", exc, file=sys.stderr)
             return 1
-    window = MainWindow(auto_check=not (smoke or scenario or performance or setup_output or package_scenario))
+    window = MainWindow(auto_check=not (smoke or scenario or performance or setup_output or package_scenario or review_scenario))
     window.show()
-    if package_scenario:
+    if review_scenario:
+        from .review_verification import start_review_verification
+        QTimer.singleShot(100, lambda: start_review_verification(app, window, review_scenario))
+    elif package_scenario:
         QTimer.singleShot(100, lambda: start_package_verification(app, window, package_scenario))
     elif setup_output:
         QTimer.singleShot(100, lambda: start_setup_verification(app, window, setup_output))

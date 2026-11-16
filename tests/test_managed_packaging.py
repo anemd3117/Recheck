@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 DOCS = (
+    'REVIEW_AND_RECHECK.md',
     'ANALYSIS_MODES.md',
     'AI_CONNECTIONS.md',
     'AI_AUTH_STATUS.md',

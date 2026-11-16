@@ -1,12 +1,12 @@
 # Recheck
 
-**1.2.4-prototype.1 · Windows x64 데스크톱 프로토타입**
+**1.2.5-prototype.1 · Windows x64 데스크톱 프로토타입**
 
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.
 
-**[Windows 배포 ZIP 다운로드](https://github.com/leekmny/Recheck/releases/download/v1.2.4-prototype.1/Recheck-1.2.4-prototype.1-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.4-prototype.1)
+**[Windows 배포 ZIP 다운로드](https://github.com/leekmny/Recheck/releases/download/v1.2.5-prototype.1/Recheck-1.2.5-prototype.1-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.5-prototype.1)
 
 ZIP을 풀고 `Recheck` 폴더 안의 **`Recheck.exe`**를 실행합니다. 실행용 Python과 Qt가 포함되어 있어 앱을 켜기 위해 Git이나 Python을 따로 설치할 필요가 없습니다. GitHub의 `Source code` ZIP은 개발용 소스입니다. [처음 실행 안내](docs/FIRST_RUN.md), [바이너리 배포 자료](docs/BINARY_DISTRIBUTION.md)를 참고하세요. 과거 프로토타입과 원래 개발 기록은 비공개 보관 저장소에 보존합니다.
 
@@ -20,6 +20,8 @@ Recheck는 기존 프로그램과 새로 만든 프로그램에 같은 입력을
 
 - 프로그램 파일 선택, 테스트 입력 작성·가져오기, 격리 실행과 결과 비교
 - 분석 모드별 도구 점검·설치 안내, 정적·동적·AI 상태를 분리한 결과와 보고서
+- 실제 수집 범위·미관측 함수·유효 원시 실행 관찰을 보여 주는 확인 범위 화면
+- 불일치·미측정 입력 보관과 새 기록으로 재검사, 실패 항목만 HTML/JSON 내보내기
 - ZIP·ZIP 기반 패키지의 구성 파일 추가·삭제·변경 비교와 JSON/HTML 내보내기
 - 함수·실행 근거 조회, AI 설명·추가 분석, 보고서와 지난 분석 확인
 - 새 사용자는 Gemini 무료 API로 시작하고, 추천 AI인 GPT도 선택 가능
@@ -39,6 +41,8 @@ Windows 배포 ZIP을 풀고 **Recheck 폴더 전체를 유지한 채 `Recheck.e
 3. **프로그램 비교**에서 정적분석·동적분석·둘 다 분석을 고르고 기존 프로그램과 새 프로그램을 선택합니다. 필요한 도구 확인과 설치 안내를 같은 화면에서 이용할 수 있습니다. AI 설명은 선택 사항입니다.
 4. 동적분석이 포함된 경우 비교할 입력을 등록하고 **비교 시작하기**를 누릅니다. 정적분석만 선택하면 실행 입력이 숨겨집니다. 도구 또는 파일 지원 조건이 맞지 않으면 안내를 확인하고 준비하거나 분석 모드를 직접 바꾸세요.
 5. 실제 출력·종료 코드·불일치 입력을 먼저 확인한 뒤 AI 설명과 보고서를 살펴봅니다.
+
+결과의 **확인 범위**에서 함수·의사코드·관계·입력별 관측과 누락을 확인하세요. **문제 입력 저장 → 재검사 보관함**에서 원본·수정본을 선택하면 저장한 입력과 비교 정책으로 새 동적 분석을 만듭니다. **실패 항목 보고서**는 불일치·실행 미측정·정적 수집 미완료·AI 실패를 구분하고 원인·다음 조치를 HTML/JSON으로 저장합니다. 원문 입력·출력은 별도 선택이며 기존 결과와 개인 설정은 유지합니다. [확인 범위·재검사·실패 보고서 안내](docs/REVIEW_AND_RECHECK.md)를 참고하세요.
 
 로컬 AI를 원하면 **내 PC의 AI로 시작**을 선택하세요. 이때만 Ollama를 시작하고 Qwen3 4B Instruct 모델을 처음 약 2.5GB 내려받습니다. 모델은 관리 전용 볼륨에 보관되며 배포 ZIP에는 포함되지 않습니다. 기본 로컬 환경은 CPU 전용이어서 응답이 느릴 수 있습니다. 실제 도구 호출 검증이 실패한 모델은 기본 비교·설명만 사용합니다. GPT 사용 중에는 Ollama나 모델을 시작·다운로드하지 않습니다.
 

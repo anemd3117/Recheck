@@ -376,6 +376,27 @@ class Engine:
             self._end_workflow()
             self._lock.release()
 
+    async def recheck_regression(self, suite_id, original, reimplementation, cancel=None):
+        """Run saved problem inputs as a new isolated comparison, with no AI."""
+        from .regression import RegressionLibrary
+
+        library = RegressionLibrary(self.store.root)
+        suite = library.load_suite(suite_id)
+        library.require_policy(suite, self.settings)
+        tests = library.prepare_tests(suite_id)
+        run = await self.analyze(original, reimplementation, tests, mode='dynamic',
+                                 cancel=cancel, analysis_mode='dynamic', ai_mode='off')
+        run['regression'] = library.recheck_result(suite, run)
+        run['analysis_result_status'] = run['status']
+        run['regression']['status'] = 'partial' if run['regression']['counts']['unmeasured'] else 'success'
+        if run['status'] == 'success' and run['regression']['counts']['unmeasured']:
+            run['status'] = 'partial'
+        self._evidence(run, 'regression', 'both', run['regression'],
+                       source='saved regression suite ' + suite_id)
+        self.store.save(run)
+        self.report(run['run_id'])
+        return run
+
     async def _pipeline(self, run, original, reimplementation, cancel):
         analysis_mode = self._analysis_mode(run)
         ai_mode = self._ai_mode(run)
@@ -2865,17 +2886,20 @@ class Engine:
         try:
             self._begin_workflow()
             run = self.store.load_run(run_id)
+            operation = dict(operation_id=new_id('operation'), kind='reinterpret',
+                             started=now(), status='running', analysis_status=run['status'])
+            run.setdefault('operations', []).append(operation)
+            run['last_operation'] = operation
             await self._step(run, 'llm', lambda: self._interpret(run, cancel), cancel)
-            required = self._required_stages(run)
-            run['status'] = (
-                'cancelled'
-                if cancelled(cancel)
-                else (
-                    'success'
-                    if all(run['stages'].get(s, {}).get('status') == 'success' for s in required)
-                    else 'partial'
-                )
-            )
+            stage = run['stages'].get('llm', {})
+            operation.update(completed=now(), stage=copy.deepcopy(stage),
+                             status=stage.get('status', 'failed'))
+            if operation['status'] not in ('success', 'cancelled'):
+                operation['status'] = 'failed'
+                operation['error_code'] = run.get('llm', {}).get('error_code') or 'interpretation_failed'
+            elif operation['status'] == 'cancelled':
+                operation['error_code'] = 'request_cancelled'
+            # A follow-up request has its own outcome; measured analysis remains valid.
             self.store.save(run)
             self.report(run_id)
             return run

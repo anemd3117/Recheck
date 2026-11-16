@@ -200,6 +200,51 @@ def compare_static_artifacts(original, rebuilt):
                      '본문이 없거나 불완전하면 CIL 비교는 미관측이며, 시그니처가 모호한 메서드는 대응시키지 않습니다.'])
 
 
+def observation_issues(observation):
+    """Reasons a retained raw observation cannot count as measured.
+
+    Older valid observations may omit ``infrastructure_ok``. Missing output is
+    never an empty output: successful records must carry both Base64 strings
+    and an actual integer exit code (bool is deliberately excluded).
+    """
+    if not isinstance(observation, dict):
+        return ['invalid_observation']
+    issues = []
+    for flag, category in (
+        ('cancelled', 'cancelled'), ('timed_out', 'timed_out'),
+        ('oom_killed', 'oom'), ('truncated', 'output_truncated'),
+    ):
+        if flag in observation and type(observation[flag]) is not bool:
+            issues.append('invalid_observation')
+        elif observation.get(flag) is True:
+            issues.append(category)
+    if 'infrastructure_ok' in observation:
+        if type(observation['infrastructure_ok']) is not bool:
+            issues.append('invalid_observation')
+        elif observation['infrastructure_ok'] is False and not issues:
+            issues.append('infrastructure_failure')
+    status = observation.get('status')
+    if status == 'blocked':
+        issues.append('unsupported_or_blocked')
+    elif status == 'cancelled':
+        issues.append('cancelled')
+    elif status not in ('success', 'completed', 'exited'):
+        if not issues:
+            issues.append('infrastructure_failure')
+    if status in ('success', 'completed', 'exited'):
+        if type(observation.get('exit_code')) is not int:
+            issues.append('invalid_observation')
+        for field in ('stdout_b64', 'stderr_b64'):
+            if not isinstance(observation.get(field), str):
+                issues.append('invalid_observation')
+                continue
+            try:
+                base64.b64decode(observation[field], validate=True)
+            except (ValueError, TypeError):
+                issues.append('invalid_observation')
+    return sorted(set(issues))
+
+
 def compare_behavior(rows, settings):
     def normalize(value):
         if settings.normalize_newlines:
@@ -211,40 +256,17 @@ def compare_behavior(rows, settings):
     comparisons = []
     for row in rows:
         a, b = row.get('original', {}), row.get('reimplementation', {})
-
-        def valid(x):
-            return (
-                x.get('status') in ('success', 'completed', 'exited')
-                and x.get('infrastructure_ok') is not False
-                and not any(x.get(k) for k in ('timed_out', 'cancelled', 'truncated', 'oom_killed'))
-                and x.get('exit_code') is not None
-            )
-
-        eligible = valid(a) and valid(b)
+        reasons = sorted(set(observation_issues(a) + observation_issues(b)))
+        eligible = not reasons
 
         def output(x, key):
-            return normalize(base64.b64decode(x.get(key + '_b64', '')))
+            return normalize(base64.b64decode(x[key + '_b64'], validate=True))
 
         equal = (
             eligible
             and a.get('exit_code') == b.get('exit_code')
             and all(output(a, key) == output(b, key) for key in ('stdout', 'stderr'))
         )
-        reasons = []
-        if not eligible:
-            for observation in (a, b):
-                for flag, label in [
-                    ('cancelled', 'cancelled'),
-                    ('timed_out', 'timed_out'),
-                    ('oom_killed', 'oom'),
-                    ('truncated', 'output_truncated'),
-                ]:
-                    if observation.get(flag):
-                        reasons.append(label)
-                if observation.get('status') == 'blocked':
-                    reasons.append('unsupported_or_blocked')
-            if not reasons:
-                reasons.append('infrastructure_failure')
         comparisons.append(
             dict(
                 test_id=row['test_id'],
@@ -253,8 +275,8 @@ def compare_behavior(rows, settings):
                 observation_categories=(
                     sorted(set(reasons)) if reasons else ['matched' if equal else 'mismatched']
                 ),
-                original_exit_code=a.get('exit_code'),
-                reimplementation_exit_code=b.get('exit_code'),
+                original_exit_code=a.get('exit_code') if isinstance(a, dict) else None,
+                reimplementation_exit_code=b.get('exit_code') if isinstance(b, dict) else None,
             )
         )
     denominator = sum(x['execution_status'] == 'measured' for x in comparisons)
@@ -276,6 +298,7 @@ def compare_behavior(rows, settings):
                 'timed_out',
                 'oom',
                 'output_truncated',
+                'invalid_observation',
             )
         },
         formula='일치한 유효 테스트 쌍 / 양쪽 모두 정상 수집된 테스트 쌍 (시간초과·취소·OOM·출력잘림·인프라실패 제외)',
