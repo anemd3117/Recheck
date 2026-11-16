@@ -21,6 +21,9 @@ DOCS = (
     'PUBLIC_HISTORY.md',
     'PUBLICATION_SCOPE.md',
     'PROJECT_STATUS.md',
+    'GEMINI_FREE_SETUP.md',
+    'PACKAGE_COMPARISON.md',
+    'ROADMAP.md',
 )
 COMPONENTS = ('static', 'execution', 'ollama')
 

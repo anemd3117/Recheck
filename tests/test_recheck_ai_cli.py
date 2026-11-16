@@ -25,7 +25,10 @@ def test_cli_lists_profiles_and_keeps_the_settings_root_separate_from_results(tm
     result = command(settings, "--data-dir", str(results), "ai", "profiles")
     assert result.returncode == 0, result.stderr
     profiles = json.loads(result.stdout)
-    assert len(profiles) == 1 and profiles[0]["profile_id"] == "legacy-local"
+    assert {item['profile_id'] for item in profiles} == {'legacy-local', 'gemini_free_default'}
+    fresh = next(item for item in profiles if item['profile_id'] == 'gemini_free_default')
+    assert fresh['provider'] == 'gemini' and not fresh['credential_ref']
+    assert not fresh['enabled'] and not fresh['external_consent']
     assert not results.exists()
 
 

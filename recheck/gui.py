@@ -119,6 +119,7 @@ class FileCard(QGroupBox):
     def __init__(self, title: str, parent=None):
         super().__init__(title, parent)
         self.inspector = None
+        self.inventory_mode = False
         self.setAcceptDrops(True)
         box = QVBoxLayout(self)
         self.path = QLineEdit()
@@ -137,7 +138,7 @@ class FileCard(QGroupBox):
         self.path.editingFinished.connect(self.inspect)
 
     def choose(self):
-        path, _ = QFileDialog.getOpenFileName(self, "분석할 실행 파일 선택", "", "모든 파일 (*)")
+        path, _ = QFileDialog.getOpenFileName(self, "비교할 파일 선택", "", "모든 파일 (*)")
         if path:
             self.set_path(path)
 
@@ -148,6 +149,9 @@ class FileCard(QGroupBox):
     def inspect(self):
         path = self.path.text().strip()
         if not path:
+            return
+        if self.inventory_mode:
+            self.info.setText('ZIP 계열 구성 비교 대상입니다. 전체 파일 목록과 내용은 비교할 때 검사합니다.')
             return
         if self.inspector and self.inspector.isRunning():
             self.info.setText("앞선 파일 정보 확인 후 새 경로를 검사합니다.")
@@ -160,6 +164,8 @@ class FileCard(QGroupBox):
         self.changed.emit(path)
 
     def inspection_done(self, result):
+        if self.inventory_mode:
+            return
         if self.path.text().strip() != result["path"]:
             return
         if "error" in result:
@@ -415,7 +421,7 @@ class MainWindow(QMainWindow):
             step.setObjectName('workflowStep')
             steps.addWidget(step)
         steps.addStretch()
-        self.compare_shortcut = QPushButton('ChatGPT로 시작 준비 →')
+        self.compare_shortcut = QPushButton('Gemini 무료로 시작하기 →')
         self.guide_next = self.compare_shortcut
         self.compare_shortcut.setObjectName('primary')
         self.compare_shortcut.clicked.connect(self.follow_next_step)
@@ -597,12 +603,13 @@ class MainWindow(QMainWindow):
         self.product_mode.addItem("두 프로그램 비교", "comparison")
         self.product_mode.addItem("기존 프로그램 다시 만들기 · 준비 중", "reconstruction")
         self.product_mode.addItem("프로그램 개선하기 · 준비 중", "modernization")
+        self.product_mode.addItem("ZIP·패키지 구성 파일 비교", "package")
         product.addWidget(self.product_mode)
         product.addStretch()
         analysis_options = QWidget()
         options_box = QVBoxLayout(analysis_options)
         options_box.setContentsMargins(0, 0, 0, 0)
-        options_box.addLayout(product)
+        box.addLayout(product)
         files = QHBoxLayout()
         self.original = FileCard("1. 기존 프로그램 (원본)")
         self.reimplementation = FileCard("2. 비교할 새 프로그램")
@@ -683,6 +690,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.mode_note, 1)
         options_box.addWidget(self.comparison_mode_panel)
         inputs = QGroupBox("3. 두 프로그램에 넣어 볼 값")
+        self.inputs_group = inputs
         ib = QVBoxLayout(inputs)
         hint = QLabel(
             "두 프로그램에 똑같이 넣어 볼 값을 등록하세요. 예: 99, 100, 101. 입력을 모르면 함께 제공한 예제부터 시작할 수 있습니다. 기본으로는 입력 없이 한 번 실행합니다."
@@ -1120,11 +1128,27 @@ class MainWindow(QMainWindow):
             files_ready=files_ready,
             result_ready=bool(self.run_result),
         )
+        from ai_providers.profiles import resolve_profile
+
+        profile = resolve_profile(self.settings)
+        gemini_start = profile.provider == 'gemini' or (
+            profile.profile_id == 'legacy-local' and not profile.model
+        )
+        if self.product_mode.currentData() == 'package':
+            selected_inputs = (self.original.path.text().strip(), self.reimplementation.path.text().strip())
+            action = ('view_package_result' if getattr(self, 'package_result', None)
+                      and getattr(self, '_package_result_inputs', None) == selected_inputs
+                      else 'compare_package' if files_ready else 'choose_files')
         messages = {
             'connect_ai': (
-                'ChatGPT로 시작 준비 →',
-                '1단계 · AI 연결. 로그인하면 모델 선택과 연결 확인이 자동으로 이어집니다.',
+                'Gemini 무료로 시작하기 →' if gemini_start else (
+                    'ChatGPT로 시작 준비 →' if profile.auth_mode == 'chatgpt'
+                    else '선택한 AI 연결 확인 →'),
+                '1단계 · 무료 API 키 발급 안내를 따라 저장하고 실제 응답을 확인하세요.'
+                if gemini_start else '1단계 · 선택한 AI 계정의 연결과 실제 응답을 확인하세요.',
             ),
+            'compare_package': ('패키지 구성 비교 시작 →', 'AI나 실행 입력 없이 구성 파일의 추가·삭제·변경을 확인합니다.'),
+            'view_package_result': ('패키지 비교 결과 확인 →', '구성 파일 비교 결과와 내보내기를 확인하세요.'),
             'prepare_tools': (
                 '도구 자동 준비 →',
                 '2단계 · 필요한 도구를 찾고 Recheck의 연결 설정을 자동으로 저장합니다.',
@@ -1158,7 +1182,12 @@ class MainWindow(QMainWindow):
             from ai_providers.profiles import resolve_profile
 
             profile = resolve_profile(self.settings)
-            if profile.profile_id == 'legacy-local' or profile.auth_mode == 'chatgpt':
+            if profile.provider == 'gemini' or (
+                profile.profile_id == 'legacy-local' and not profile.model
+            ):
+                self.provider_panel.reload_profiles(profile.profile_id)
+                self.provider_panel.open_gemini_setup()
+            elif profile.auth_mode == 'chatgpt':
                 self.provider_panel.quick_connect()
             else:
                 self.provider_panel.reload_profiles(profile.profile_id)
@@ -1170,6 +1199,11 @@ class MainWindow(QMainWindow):
             self.navigation.setCurrentRow(2)
         elif action == 'compare':
             self.start_analysis()
+        elif action == 'compare_package':
+            self.start_package_comparison()
+        elif action == 'view_package_result':
+            self.package_dialog.show()
+            self.package_dialog.raise_()
         else:
             self.navigation.setCurrentRow(1)
 
@@ -1180,7 +1214,9 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, action)
 
     def beginner_ai_ready(self, result):
-        self.notice('ChatGPT 연결 완료. 이어서 필요한 도구를 자동으로 확인합니다.')
+        provider = result.get('profile', {}).get('provider', '')
+        name = 'Gemini' if provider == 'gemini' else 'ChatGPT'
+        self.notice(name + ' 연결 완료. 이어서 필요한 도구를 자동으로 확인합니다.')
         self.after_current_task(lambda: self.find_setup(auto_apply=True))
 
     def complete_automatic_tools(self):
@@ -1504,18 +1540,35 @@ class MainWindow(QMainWindow):
     def product_mode_changed(self, *_):
         product = self.product_mode.currentData()
         comparison = product == "comparison"
+        package = product == 'package'
+        previous_package_mode = self.original.inventory_mode
         modernization = product == "modernization"
-        self.reimplementation.setVisible(comparison)
-        self.reconstruction_panel.setVisible(not comparison)
+        self.reimplementation.setVisible(comparison or package)
+        self.reconstruction_panel.setVisible(not comparison and not package)
         self.comparison_mode_panel.setVisible(comparison)
+        self.inputs_group.setVisible(not package)
+        self.original.inventory_mode = self.reimplementation.inventory_mode = package
+        self.original.setTitle('1. 원본 패키지' if package else '1. 기존 프로그램 (원본)')
+        self.reimplementation.setTitle('2. 변경된 패키지' if package else '2. 비교할 새 프로그램')
+        if package:
+            for card in (self.original, self.reimplementation):
+                card.info.setText('ZIP·JAR·APK·MSIX·IPA 등의 ZIP 구성만 비교합니다. 앱 실행·서명 검증은 하지 않습니다.')
+                card.info.setToolTip('')
+        elif previous_package_mode:
+            for card in (self.original, self.reimplementation):
+                card.info.setText('파일을 선택하면 형식과 지원 여부를 확인합니다.')
+                card.info.setToolTip('')
         self.source_path.setEnabled(modernization)
         self.source_button.setEnabled(modernization)
-        self.start_button.setText("비교 시작하기" if comparison else "요청 내용 저장하기")
+        self.start_button.setText('패키지 구성 비교하기' if package else (
+            "비교 시작하기" if comparison else "요청 내용 저장하기"))
         self.analysis_note.setText(
+            '파일의 추가·삭제·내용 변경을 비교합니다. 실행 동작의 동등성을 판정하지 않습니다.' if package else
             "프로그램 구조를 기본으로 비교합니다. 실행 비교는 지원되는 환경에서 진행하며, 등록한 입력 범위만 확인합니다."
             if comparison
             else "준비 중인 기능입니다. 지금은 원본 파일과 요청 사항을 보관하며 자동 생성·수정은 진행하지 않습니다."
         )
+        self.refresh_start_guide()
 
     def collect_settings(self):
         values = (
@@ -2150,6 +2203,8 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.notice("현재 작업을 완료하거나 취소한 뒤 다시 실행하세요.")
             return
+        if self.product_mode.currentData() == 'package':
+            return self.start_package_comparison()
         if self.product_mode.currentData() != "comparison":
             return self.start_reconstruction()
         if not self.original.path.text().strip() or not self.reimplementation.path.text().strip():
@@ -2176,6 +2231,33 @@ class MainWindow(QMainWindow):
             ),
             self.show_result,
         )
+
+    def start_package_comparison(self):
+        if self._task_join_pending or (self.worker and self.worker.isRunning()):
+            self.notice('현재 작업을 완료하거나 취소한 뒤 다시 실행하세요.')
+            return
+        original = self.original.path.text().strip()
+        changed = self.reimplementation.path.text().strip()
+        if not original or not changed:
+            self.show_error('비교할 두 패키지 파일을 모두 선택하세요.')
+            return
+        from .package_comparison import compare_packages
+
+        async def work(settings, cancel, emit):
+            return await asyncio.to_thread(compare_packages, original, changed, cancel=cancel)
+
+        def done(result):
+            from .package_ui import PackageResultDialog
+
+            self.package_result = result
+            self._package_result_inputs = (original, changed)
+            self.package_dialog = PackageResultDialog(result, self)
+            self.package_dialog.show()
+            self.refresh_start_guide()
+            self.notice('패키지 구성 비교를 마쳤습니다.' if result['status'] == 'success'
+                        else '전체 구성을 비교하지 못했습니다. 결과 창의 상태와 원인을 확인하세요.')
+
+        return self.launch_task('패키지 구성 파일 비교 중', work, done)
 
     def start_reconstruction(self):
         product = self.product_mode.currentData()
@@ -3150,6 +3232,53 @@ def start_setup_verification(app, window, output):
     timer.start()
 
 
+def start_package_verification(app, window, config):
+    """Exercise the normal package GUI worker in a fresh developer proof folder."""
+    from .models import atomic_json, data_root
+    from .package_ui import package_report_html
+
+    output = Path(config['output_dir']).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    settings_path = data_root() / 'settings.json'
+    before = settings_path.read_bytes() if settings_path.exists() else None
+    runs_before = len(window.engine.store.list_runs())
+    window.product_mode.setCurrentIndex(window.product_mode.findData('package'))
+    window.navigation.setCurrentRow(1)
+    window.original.set_path(config['original'])
+    window.reimplementation.set_path(config['reimplementation'])
+    window.start_button.click()
+    timer = QTimer(window)
+    timer.setInterval(100)
+    window.package_verification_timer = timer
+    started = time.monotonic()
+
+    def poll():
+        if time.monotonic() - started > 120:
+            window.cancel_work()
+        if window._task_join_pending or (window.worker and window.worker.isRunning()):
+            return
+        timer.stop()
+        result = getattr(window, 'package_result', {})
+        unchanged = before == (settings_path.read_bytes() if settings_path.exists() else None)
+        visible = bool(getattr(window, 'package_dialog', None) and window.package_dialog.isVisible())
+        if visible:
+            window.package_dialog.grab().save(str(output / 'package-gui.png'))
+            (output / 'report.html').write_text(package_report_html(result), encoding='utf-8')
+        record = dict(result=result, gui_visible=visible, settings_unchanged=unchanged,
+                      engine_runs_created=len(window.engine.store.list_runs()) - runs_before,
+                      runtime='frozen' if getattr(sys, 'frozen', False) else 'source',
+                      scope='Actual normal package GUI handler; no target execution or AI')
+        record['exit_code'] = 0 if visible and unchanged and result.get('status') == 'success' else 1
+        atomic_json(output / 'package-gui.json', record)
+        if visible:
+            window.package_dialog.close()
+        window.close()
+        app.exit(record['exit_code'])
+
+    timer.timeout.connect(poll)
+    timer.start()
+
+
 def main():
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Recheck")
@@ -3161,6 +3290,21 @@ def main():
     scenario = None
     performance = None
     setup_output = None
+    package_scenario = None
+    if '--verify-package' in sys.argv:
+        try:
+            config_path = Path(sys.argv[sys.argv.index('--verify-package') + 1]).resolve(strict=True)
+            package_scenario = json.loads(config_path.read_text(encoding='utf-8-sig'))
+            if set(package_scenario) != {'original', 'reimplementation', 'output_dir'}:
+                raise ValueError('패키지 검증에는 original, reimplementation, output_dir이 필요합니다.')
+            for key, value in package_scenario.items():
+                path = Path(value)
+                package_scenario[key] = str((path if path.is_absolute() else config_path.parent / path).resolve())
+            if Path(package_scenario['output_dir']).exists():
+                raise ValueError('새 패키지 검증 폴더를 지정하세요.')
+        except Exception:
+            print('패키지 검증 설정의 경로와 새 출력 폴더를 확인하세요.', file=sys.stderr)
+            return 1
     if '--verify-setup' in sys.argv:
         try:
             setup_output = sys.argv[sys.argv.index('--verify-setup') + 1]
@@ -3191,9 +3335,11 @@ def main():
         except Exception as exc:
             print("검증 시나리오 설정 오류:", exc, file=sys.stderr)
             return 1
-    window = MainWindow(auto_check=not (smoke or scenario or performance or setup_output))
+    window = MainWindow(auto_check=not (smoke or scenario or performance or setup_output or package_scenario))
     window.show()
-    if setup_output:
+    if package_scenario:
+        QTimer.singleShot(100, lambda: start_package_verification(app, window, package_scenario))
+    elif setup_output:
         QTimer.singleShot(100, lambda: start_setup_verification(app, window, setup_output))
     elif performance:
         QTimer.singleShot(100, lambda: start_performance_verification(app, window, *performance))
@@ -3243,12 +3389,25 @@ def main():
                         ],
                         'evidence_permissions': sorted(panel.evidence_checks),
                         'api_key_masked': panel.api_key.echoMode() == QLineEdit.EchoMode.Password,
+                        'gemini_api_key_masked': panel.gemini_api_key.echoMode() == QLineEdit.EchoMode.Password,
+                        'gemini_guide_available': panel.gemini_key_help.isEnabled(),
+                        'gpt_recommended_available': panel.quick_button.isEnabled(),
                         'model_direct_entry': panel.model_combo.isEditable(),
                         'thread_running': bool(window.worker and window.worker.isRunning()),
                     }
                 ),
                 encoding='utf-8',
             )
+            panel.gemini_help_toggle.setChecked(True)
+            panel.setup_scroll.verticalScrollBar().setValue(0)
+            app.processEvents()
+            window.grab().save(str(folder / 'gui-gemini-key-guide.png'))
+            panel.open_gemini_setup()
+            app.processEvents()
+            window.grab().save(str(folder / 'gui-gemini-key-entry.png'))
+            panel.setup_scroll.ensureWidgetVisible(panel.quick_button)
+            app.processEvents()
+            window.grab().save(str(folder / 'gui-gpt-recommendation.png'))
             window.close()
             app.quit()
 

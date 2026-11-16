@@ -6,9 +6,9 @@ import asyncio
 import copy
 import re
 import threading
-import uuid
 
-from PySide6.QtCore import Qt, QThread, Signal, Slot
+from PySide6.QtCore import Qt, QThread, QUrl, Signal, Slot
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -123,8 +123,15 @@ class ProviderPanel(QWidget):
         self.reload_profiles()
 
     def _build(self):
-        outer = QVBoxLayout(self)
-        outer.addWidget(label('AI 연결', 'pageTitle'))
+        frame = QVBoxLayout(self)
+        frame.addWidget(label('AI 연결', 'pageTitle'))
+        self.setup_scroll = QScrollArea()
+        self.setup_scroll.setWidgetResizable(True)
+        self.setup_scroll.setAccessibleName('Gemini 기본 연결과 GPT 추천 전체 안내')
+        setup_content = QWidget()
+        outer = QVBoxLayout(setup_content)
+        frame.addWidget(self.setup_scroll)
+        self._build_gemini_card(outer)
         quick = QGroupBox('추천 · ChatGPT로 시작하기')
         quick_layout = QVBoxLayout(quick)
         self.quick_summary = label(
@@ -384,6 +391,7 @@ class ProviderPanel(QWidget):
         outer.addWidget(scroll)
         scroll.hide()
         outer.addStretch()
+        self.setup_scroll.setWidget(setup_content)
 
         self.quick_button.clicked.connect(self.quick_connect)
         self.quick_cancel.clicked.connect(self.cancel_operation)
@@ -429,12 +437,179 @@ class ProviderPanel(QWidget):
             checkbox.toggled.connect(self._update_actions)
             checkbox.toggled.connect(self._invalidate)
 
+    def _build_gemini_card(self, outer):
+        self.gemini_card = QGroupBox('기본 · Gemini 무료로 시작하기')
+        layout = QVBoxLayout(self.gemini_card)
+        self.gemini_summary = label(
+            'Google AI Studio에서 무료 프로젝트의 API 키를 만들고 연결하세요.'
+        )
+        layout.addWidget(self.gemini_summary)
+        help_row = QHBoxLayout()
+        self.gemini_key_help = QPushButton('AI Studio에서 API 키 만들기')
+        self.gemini_key_help.setAccessibleName('Gemini 공식 API 키 만들기 페이지 열기')
+        self.gemini_help_toggle = QPushButton('키 만드는 순서 보기')
+        self.gemini_help_toggle.setCheckable(True)
+        help_row.addWidget(self.gemini_key_help)
+        help_row.addWidget(self.gemini_help_toggle)
+        help_row.addStretch()
+        layout.addLayout(help_row)
+        self.gemini_help = label(
+            '1. AI Studio에 Google 계정으로 로그인한 뒤 Create API key를 누르세요.\n'
+            '2. Create a new project로 새 프로젝트를 만들거나 사용할 기존 프로젝트를 선택하세요. '
+            '프로젝트 인증을 요청하면 안내에 따라 완료하세요.\n'
+            '3. 프로젝트의 요금 등급이 Free tier이고 결제가 연결되지 않았는지 확인하세요. '
+            '유료 업그레이드는 필요하지 않습니다.\n'
+            '4. 만든 API 키를 아래 보안 입력란에 붙여 넣고 두 확인란을 선택한 뒤 연결하세요. '
+            '키를 채팅·소스 코드·배포 파일에 넣지 마세요.',
+            'muted',
+        )
+        self.gemini_help.hide()
+        layout.addWidget(self.gemini_help)
+        self.gemini_api_key = QLineEdit()
+        self.gemini_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_api_key.setAccessibleName('Gemini 개인 API 키 보안 입력')
+        self.gemini_api_key.setPlaceholderText('내 무료 프로젝트의 API 키 · 이 PC의 DPAPI 보안 저장소에 저장')
+        layout.addWidget(self.gemini_api_key)
+        self.gemini_free_confirm = QCheckBox(
+            '이 키의 프로젝트가 Free tier이고 결제가 연결되지 않았음을 확인했습니다.'
+        )
+        self.gemini_evidence_consent = QCheckBox(
+            '비교 입력·실행 결과·선택한 함수와 디컴파일 근거를 Gemini로 보내는 데 동의합니다.'
+        )
+        layout.addWidget(self.gemini_free_confirm)
+        layout.addWidget(self.gemini_evidence_consent)
+        layout.addWidget(label(
+            '무료 한도는 모델·계정·프로젝트에 따라 달라집니다. 앱이 요금 등급을 자동 검증하지는 않습니다. '
+            '연결 기능 확인은 짧은 요청 최대 4회이며 비교 작업에는 별도 요청 예산이 적용됩니다. '
+            '무료 등급의 전송 내용은 Google 제품 개선에 사용될 수 있습니다.', 'muted'
+        ))
+        actions = QHBoxLayout()
+        self.gemini_connect_button = QPushButton('Gemini 키 보안 저장하고 응답 확인')
+        self.gemini_connect_button.setObjectName('primary')
+        self.gemini_cancel_button = QPushButton('Gemini 연결 중단')
+        self.gemini_cancel_button.setEnabled(False)
+        actions.addWidget(self.gemini_connect_button, 1)
+        actions.addWidget(self.gemini_cancel_button)
+        layout.addLayout(actions)
+        self.gemini_progress = label(
+            '키는 현재 Windows 사용자의 DPAPI로 보호합니다. 확인된 응답 이후에만 기본 AI로 선택합니다.',
+            'muted',
+        )
+        layout.addWidget(self.gemini_progress)
+        self.gemini_key_help.clicked.connect(self.open_gemini_key_page)
+        self.gemini_api_key.textEdited.connect(
+            lambda _: self.gemini_free_confirm.setChecked(False)
+        )
+        self.gemini_help_toggle.toggled.connect(self.gemini_help.setVisible)
+        self.gemini_connect_button.clicked.connect(self.connect_gemini)
+        self.gemini_cancel_button.clicked.connect(self.cancel_operation)
+        outer.addWidget(self.gemini_card)
+
+    def _gemini_message(self, text):
+        self.gemini_progress.setText(text)
+        self.status.setText(text)
+        self.notice.emit(text)
+
+    def open_gemini_key_page(self, *_):
+        if not QDesktopServices.openUrl(QUrl('https://aistudio.google.com/api-keys')):
+            self._gemini_message(
+                'Gemini 키 만들기 페이지를 열지 못했습니다. 기본 브라우저에서 Google AI Studio의 API keys를 여세요.'
+            )
+
+    def open_gemini_setup(self, *_):
+        """키 입력 안내만 열며 프로필·인증·원격 요청은 변경하지 않는다."""
+        if self._operation_active or self._external_busy or self._is_busy():
+            self._gemini_message('현재 작업을 완료하거나 중단한 뒤 Gemini 키를 연결하세요.')
+            return False
+        self.gemini_card.show()
+        self.gemini_api_key.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.setup_scroll.ensureWidgetVisible(self.gemini_api_key)
+        return True
+
+    def connect_gemini(self, *_):
+        secret = self.gemini_api_key.text().strip()
+        self.gemini_api_key.clear()
+        try:
+            if self._blocked():
+                return False
+            if not self.gemini_free_confirm.isChecked():
+                self._gemini_message(
+                    '먼저 AI Studio에서 이 키의 프로젝트가 Free tier이고 결제가 연결되지 않았는지 확인해 주세요.'
+                )
+                return False
+            if not self.gemini_evidence_consent.isChecked():
+                self._gemini_message('Gemini로 보낼 비교 근거의 범위를 확인하고 전송에 동의해 주세요.')
+                return False
+            draft_selected = bool(
+                self._draft and self._draft['profile_id'] == self._current_id
+            )
+            if draft_selected:
+                from ai_providers.contracts import ProviderProfile
+
+                selected = ProviderProfile.model_validate(self.profile_values())
+            else:
+                selected = self.manager.get_profile(self._current_id) if self._current_id else None
+            existing = (
+                selected if selected is not None and selected.provider == 'gemini'
+                and selected.auth_mode == 'api_key' else None
+            )
+            if not secret and not (existing and existing.credential_ref):
+                self._gemini_message('Gemini 개인 API 키를 보안 입력란에 입력해 주세요. 다른 연결의 키는 사용하지 않습니다.')
+                return False
+            from .gemini_setup import GeminiSetup
+
+            setup = GeminiSetup(self.manager)
+            if existing and draft_selected:
+                existing = self._save()
+            profile = setup.prepare_profile(
+                existing.profile_id if existing else None, consent=True
+            )
+            if secret:
+                profile = self.manager.save_secret(profile.profile_id, secret)
+            self.reload_profiles(profile.profile_id)
+            self.settings_refreshed.emit()
+        except Exception as exc:
+            self.settings_refreshed.emit()
+            self._safe_failure(exc, provider='gemini')
+            return False
+        finally:
+            secret = ''
+
+        def done(result):
+            if result.get('ready') is not True:
+                self._show_failure('setup_inference', provider='gemini')
+                return
+            self.reload_profiles(result['profile']['profile_id'])
+            self.profile_changed.emit(self.manager.get_profile(result['profile']['profile_id']))
+            self.capabilities_checked.emit(result['capabilities'])
+            self.gemini_summary.setText('연결 완료 · Gemini · ' + result['model'])
+            self._gemini_message(
+                'Gemini의 실제 응답을 확인하고 기본 분석 AI로 저장했습니다. '
+                '무료 프로젝트의 한도·요금 등급은 AI Studio에서 계속 확인해 주세요.'
+            )
+            self.setup_ready.emit(result)
+
+        return self._start(
+            'Gemini 무료 API 연결',
+            lambda pid, cancel, emit: setup.connect(pid, cancel=cancel, on_event=emit),
+            done,
+            failure_provider='gemini',
+        )
+
     def _message(self, text):
         self.status.setText(text)
         self.quick_progress.setText(text)
         self.notice.emit(text)
 
-    def _show_failure(self, code):
+    def _show_failure(self, code, *, provider=None):
+        if provider == 'gemini' or (provider is None and self.provider_combo.currentData() == 'gemini'):
+            from .gemini_ui import gemini_error_message
+
+            text = gemini_error_message(code)
+            self.gemini_progress.setText(text)
+            self.status.setText(text + ' (진단 코드: ' + code + ')')
+            self.notice.emit(text)
+            return
         from .setup_flow import ai_error_message
 
         text = ai_error_message(code)
@@ -442,14 +617,22 @@ class ProviderPanel(QWidget):
         self.status.setText(text + ' (진단 코드: ' + code + ')')
         self.notice.emit(text)
 
-    def _safe_failure(self, exc):
+    def _safe_failure(self, exc, *, provider=None):
         # 원시 예외 문자열은 키·토큰·URL을 포함할 수 있어 UI로 전달하지 않는다.
         code = getattr(exc, 'code', '')
         if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_]{1,80}', code):
             code = 'operation_failed'
-        self._show_failure(code)
+        self._show_failure(code, provider=provider)
 
     def show_setup_progress(self, event):
+        if event.get('kind') == 'gemini_setup' and self._operation_active:
+            messages = {
+                'models': '1/3 · Gemini 무료 후보 모델을 이 프로젝트에서 사용할 수 있는지 확인하고 있습니다.',
+                'response': '2/3 · Gemini의 실제 응답과 구조화 출력 기능을 확인하고 있습니다.',
+                'activate': '3/3 · 검증된 Gemini를 기본 분석 AI로 저장하고 있습니다.',
+            }
+            self._gemini_message(messages.get(event.get('step'), 'Gemini 연결을 확인하고 있습니다.'))
+            return
         if event.get('kind') != 'quick_setup' or not self._operation_active:
             return
         from .setup_flow import activity_message
@@ -525,8 +708,16 @@ class ProviderPanel(QWidget):
     def _show_profile(self, data):
         self._loading = True
         self._generation += 1
+        if self._current_id != data['profile_id']:
+            self.gemini_free_confirm.setChecked(False)
+            self.gemini_api_key.clear()
         self._base = copy.deepcopy(data)
         self._current_id = data['profile_id']
+        self.gemini_summary.setText(
+            '연결 대상: ' + data.get('name', 'Gemini') + ' · ' + data.get('model', '')
+            if data.get('provider') == 'gemini' else
+            'Google AI Studio에서 무료 프로젝트의 개인 키를 만들어 새 Gemini 연결을 시작하세요.'
+        )
         self.api_key.clear()
         self.oauth_client_secret.clear()
         self.name.setText(data.get('name', ''))
@@ -581,6 +772,10 @@ class ProviderPanel(QWidget):
         if data.get('auth_mode') == 'chatgpt' and data.get('credential_ref'):
             self.quick_summary.setText(
                 'ChatGPT 계정 연결됨 · ' + (data.get('model') or '추천 모델을 자동 선택합니다.')
+            )
+        if data.get('provider') == 'gemini' and data.get('credential_ref'):
+            self.gemini_summary.setText(
+                'Gemini 키 보안 저장됨 · ' + (data.get('model') or '무료 후보 모델 확인 필요')
             )
 
     def _set_auth_options(self, auth_mode=None):
@@ -729,6 +924,12 @@ class ProviderPanel(QWidget):
         self.cancel_button.setEnabled(self._operation_active)
         self.quick_button.setEnabled(not busy)
         self.quick_cancel.setEnabled(self._operation_active)
+        for control in (
+            self.gemini_connect_button, self.gemini_api_key, self.gemini_free_confirm,
+            self.gemini_evidence_consent, self.gemini_key_help, self.gemini_help_toggle,
+        ):
+            control.setEnabled(not busy)
+        self.gemini_cancel_button.setEnabled(self._operation_active)
         self.details_toggle.setEnabled(not busy)
 
     def set_busy(self, busy):
@@ -818,34 +1019,10 @@ class ProviderPanel(QWidget):
     def new_profile(self, *_):
         if self._blocked():
             return
-        self._draft = {
-            'profile_id': str(uuid.uuid4()),
-            'name': 'ChatGPT · 추천',
-            'provider': 'openai',
-            'auth_mode': 'chatgpt',
-            'endpoint': ENDPOINTS['openai'],
-            'model': RECOMMENDED_MODEL,
-            'structured_mode': 'json_prompt',
-            'credential_ref': '',
-            'credential_version': 0,
-            'enabled': True,
-            'experimental': True,
-            'external_consent': True,
-            'allowed_evidence': ('runtime', 'static', 'code'),
-            'options': {
-                **{key: field.value() for key, field in self.option_fields.items()},
-                'context_budget': 32768,
-                'max_output_tokens': 4096,
-                'max_requests': 5,
-            },
-            'oauth_client_id': '',
-            'oauth_scopes': (),
-            'oauth_client_secret_ref': '',
-            'google_project_id': '',
-            'workspace_id': '',
-            'api_version': '',
-        }
-        self.profile_combo.addItem('ChatGPT · 추천 · 저장 전', self._draft['profile_id'])
+        from .gemini_setup import new_free_profile
+
+        self._draft = value_dict(new_free_profile())
+        self.profile_combo.addItem('Gemini · 무료 기본 · 저장 전', self._draft['profile_id'])
         self.profile_combo.setCurrentIndex(self.profile_combo.count() - 1)
 
     def delete_profile(self, *_):
@@ -897,7 +1074,7 @@ class ProviderPanel(QWidget):
         except Exception as exc:
             self._safe_failure(exc)
 
-    def _start(self, title, operation, complete):
+    def _start(self, title, operation, complete, *, failure_provider=None):
         if self._blocked():
             return False
         try:
@@ -936,7 +1113,7 @@ class ProviderPanel(QWidget):
                 self._message('선택이 바뀌어 이전 연결의 응답을 적용하지 않았습니다.')
                 return
             if not envelope.get('ok'):
-                self._show_failure(envelope.get('code', 'operation_failed'))
+                self._show_failure(envelope.get('code', 'operation_failed'), provider=failure_provider)
                 return
             try:
                 complete(envelope['result'])
@@ -1144,6 +1321,7 @@ class ProviderPanel(QWidget):
             worker.cancel_event.set()
         if self._operation_active:
             self._message('연결 작업 중단을 요청했습니다. 종료 결과를 기다리고 있습니다.')
+            self.gemini_progress.setText('연결 작업 중단을 요청했습니다. 종료 결과를 기다리고 있습니다.')
 
     def closeEvent(self, event):
         self.cancel_operation()

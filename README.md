@@ -1,12 +1,12 @@
 # Recheck
 
-**1.2.2-prototype.1 · Windows x64 데스크톱 프로토타입**
+**1.2.3-prototype.1 · Windows x64 데스크톱 프로토타입**
 
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.
 
-**[Windows 배포 ZIP 다운로드](https://github.com/leekmny/Recheck/releases/download/v1.2.2-prototype.1/Recheck-1.2.2-prototype.1-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.2-prototype.1)
+**[Windows 배포 ZIP 다운로드](https://github.com/leekmny/Recheck/releases/download/v1.2.3-prototype.1/Recheck-1.2.3-prototype.1-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.3-prototype.1)
 
 ZIP을 풀고 `Recheck` 폴더 안의 **`Recheck.exe`**를 실행합니다. 실행용 Python과 Qt가 포함되어 있어 앱을 켜기 위해 Git이나 Python을 따로 설치할 필요가 없습니다. GitHub의 `Source code` ZIP은 개발용 소스입니다. [처음 실행 안내](docs/FIRST_RUN.md), [바이너리 배포 자료](docs/BINARY_DISTRIBUTION.md)를 참고하세요. 과거 프로토타입과 원래 개발 기록은 비공개 보관 저장소에 보존합니다.
 
@@ -19,8 +19,9 @@ Recheck는 기존 프로그램과 새로 만든 프로그램에 같은 입력을
 ## 현재 기능과 범위
 
 - 프로그램 파일 선택, 테스트 입력 작성·가져오기, 격리 실행과 결과 비교
+- ZIP·ZIP 기반 패키지의 구성 파일 추가·삭제·변경 비교와 JSON/HTML 내보내기
 - 함수·실행 근거 조회, AI 설명·추가 분석, 보고서와 지난 분석 확인
-- ChatGPT 로그인부터 모델·기능 확인, 기본 AI 저장, 설치된 도구 준비까지 연결
+- 새 사용자는 Gemini 무료 API로 시작하고, 추천 AI인 GPT도 선택 가능
 - 도구 설치·관리: PATH 밖의 설치 위치 확인, 필요한 도구의 WinGet 설치와 공식 다운로드 안내
 - Ollama, OpenAI API, Claude API, Gemini, OpenAI 호환 서버의 연결 설정
 - 배포 환경 자동 가져오기: Java·Ghidra·REA 정적 분석과 프로그램 실행을 별도 컨테이너로 분리
@@ -32,7 +33,7 @@ Linux x86-64 ELF 콘솔 프로그램의 실행 비교를 지원합니다. Window
 
 Windows 배포 ZIP을 풀고 **Recheck 폴더 전체를 유지한 채 `Recheck.exe`**를 실행하세요. `_internal` 폴더에는 실행용 Python·Qt와 앱 리소스가 있습니다. 분석에 필요한 Docker 이미지는 처음 준비할 때 인터넷에서 구성합니다. 프로그램 실행 비교에는 Linux 컨테이너를 실행할 수 있는 Docker Desktop·WSL 2가 필요합니다. GPT 연결에도 인터넷이 필요합니다.
 
-1. **시작하기**에서 **ChatGPT로 연결하고 자동 설정**을 누르고 브라우저에서 승인합니다. 다른 AI는 세부 설정에서 선택할 수 있습니다.
+1. **시작하기 → Gemini 무료로 시작하기**에서 안내에 따라 자신의 API 키를 발급·저장하고 실제 응답을 확인합니다. 새 설치의 기본 연결은 Gemini 3.5 Flash-Lite이며, 연결 전에는 활성화되지 않습니다. 기존 사용자의 AI 선택·키·예산은 유지합니다. GPT는 추천 선택으로 제공하며 ChatGPT 로그인으로 연결합니다. [Gemini 무료 연결 안내](docs/GEMINI_FREE_SETUP.md)를 참고하세요.
 2. **도구 설치·관리 → 도구 확인**에서 필요한 도구를 선택해 설치합니다. Docker Desktop을 실행한 뒤 **분석 도구 내려받아 준비**를 누릅니다. 최초 준비에는 인터넷과 수 GB의 디스크 공간이 필요합니다. Java·Ghidra·REA는 이 분석 환경 안에 준비됩니다. 이미지를 빌드하거나 설치하는 작업은 해당 버튼을 눌렀을 때만 시작합니다.
 3. **프로그램 비교**에서 기존 프로그램과 새 프로그램을 선택합니다.
 4. 비교할 입력을 등록하고 **비교 시작하기**를 누릅니다.
@@ -41,6 +42,8 @@ Windows 배포 ZIP을 풀고 **Recheck 폴더 전체를 유지한 채 `Recheck.e
 로컬 AI를 원하면 **내 PC의 AI로 시작**을 선택하세요. 이때만 Ollama를 시작하고 Qwen3 4B Instruct 모델을 처음 약 2.5GB 내려받습니다. 모델은 관리 전용 볼륨에 보관되며 배포 ZIP에는 포함되지 않습니다. 기본 로컬 환경은 CPU 전용이어서 응답이 느릴 수 있습니다. 실제 도구 호출 검증이 실패한 모델은 기본 비교·설명만 사용합니다. GPT 사용 중에는 Ollama나 모델을 시작·다운로드하지 않습니다.
 
 AI 인증은 각 PC의 Recheck에서 별도로 연결합니다. GitHub 로그인이나 저장소 복제로 AI 계정 연결이 이전되지는 않습니다. 연결 방법과 제공자별 확인 범위는 [AI 연결 안내](docs/AI_CONNECTIONS.md), [인증 구현·검증 상태](docs/AI_AUTH_STATUS.md)에 정리했습니다.
+
+ZIP 구성만 비교하려면 **프로그램 비교**에서 **ZIP·패키지 구성 파일 비교**를 선택하세요. 이 모드는 Docker·AI·실행 입력 없이 구성 파일의 경로·종류·크기·내용 해시를 비교합니다. APK·JAR·MSIX·IPA도 유효한 ZIP 컨테이너인 경우 이 범위에서 검사하며 앱 실행·코드 의미·서명은 판정하지 않습니다. [패키지 비교 안내](docs/PACKAGE_COMPARISON.md)에 사용법과 크기·형식 제한이 있습니다.
 
 ## 소스로 실행하고 수정하기
 

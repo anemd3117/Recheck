@@ -939,9 +939,14 @@ class HTTPProvider:
                                 )
                             block[key] = _json(arguments)
                         if kind == 'gemini' and block.get('type') == 'model_output':
+                            # Gemini may include the first output in step.start;
+                            # later text deltas contain only the continuation.
+                            content = list(block.get('content', []))
+                            if block.get('text'):
+                                content.append({'type': 'text', 'text': block['text']})
                             block = {
                                 'type': 'model_output',
-                                'content': [{'type': 'text', 'text': block.get('text', '')}],
+                                'content': content,
                             }
                         assembled.append(block)
                     final = {**metadata, **event.get('interaction', {})}

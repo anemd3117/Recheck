@@ -589,9 +589,9 @@ def test_empty_installed_model_list_clears_missing_saved_model(window):
     assert load_settings().model == ""
 
 
-def test_three_product_modes_preserve_comparison_as_default(window):
+def test_product_modes_preserve_comparison_as_default(window):
     assert window.product_mode.currentData() == "comparison"
-    assert window.product_mode.count() == 3
+    assert window.product_mode.findData('package') >= 0
     assert window.reconstruction_panel.isHidden()
     assert not window.reimplementation.isHidden()
     assert not window.approve_build.isChecked()

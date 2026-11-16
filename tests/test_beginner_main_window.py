@@ -31,12 +31,17 @@ def window(app, tmp_path, monkeypatch):
 
 def test_first_run_explains_the_next_action_and_settings_open_on_simple_ai_connection(window):
     assert hasattr(window, 'guide_next'), 'A first-time user needs one next action'
-    assert 'ChatGPT' in window.guide_next.text()
+    assert 'Gemini' in window.guide_next.text()
     assert window.settings_tabs.currentWidget() is window.provider_panel
-    assert '1' in window.guide_status.text() and 'AI' in window.guide_status.text()
+    assert '1' in window.guide_status.text() and 'API 키' in window.guide_status.text()
 
 
 def test_home_connect_commits_the_preset_before_starting_its_worker(window):
+    from recheck.setup_flow import ChatGPTSetup
+
+    profile = ChatGPTSetup(window.provider_manager).prepare_profile()
+    window.provider_manager.select_profile(profile.profile_id)
+    window.provider_settings_changed()
     pending = []
     window.provider_panel._launcher = lambda title, work, done: pending.append((work, done)) or True
     window.follow_next_step()

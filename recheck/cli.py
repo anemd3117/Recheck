@@ -327,6 +327,9 @@ def _parser():
     sub.add_parser('history')
     inspect = sub.add_parser('inspect')
     inspect.add_argument('path')
+    package = sub.add_parser('compare-package', help='ZIP 구성 파일 비교; 추출·실행·AI 호출 없음')
+    package.add_argument('--original', required=True)
+    package.add_argument('--reimplementation', required=True)
     analyze = sub.add_parser('analyze')
     analyze.add_argument('--original', required=True)
     analyze.add_argument('--reimplementation', required=True)
@@ -359,6 +362,10 @@ def _parser():
 
 
 def _execute(args, cancel):
+    if args.command == 'compare-package':
+        from .package_comparison import compare_packages
+
+        return compare_packages(args.original, args.reimplementation, cancel=cancel)
     if args.command == 'tools':
         from .prerequisites import inspect_prerequisites
 
@@ -448,7 +455,8 @@ def main(argv=None):
         code = result_code(result)
         # Missing prerequisites are the reason for this diagnostic command: keep
         # its safe path/version rows visible even when readiness is partial.
-        emit_json_result(result if args.command == 'tools' else public_result(result), output)
+        emit_json_result(result if args.command in ('tools', 'compare-package')
+                         else public_result(result), output)
         return code
     except HelpRequest as help_request:
         if output is not None:

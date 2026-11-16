@@ -773,6 +773,10 @@ class SettingsHistory:
             )
         try:
             disk = Settings.model_validate_json(raw) if raw is not None else Settings()
+            if raw is None and disk != current:
+                from .models import initial_settings
+
+                disk = initial_settings()
         except ValueError:
             raise ValueError(
                 '저장된 설정 파일을 읽을 수 없습니다. 일반 설정을 확인하고 저장한 뒤 다시 시도하세요.'

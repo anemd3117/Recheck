@@ -2,11 +2,21 @@
 
 ## 배포 ZIP으로 실행
 
-1. [Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v1.2.2-prototype.1/Recheck-1.2.2-prototype.1-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.2-prototype.1)도 확인하세요.
+1. [1.2.3 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v1.2.3-prototype.1/Recheck-1.2.3-prototype.1-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v1.2.3-prototype.1)도 확인하세요.
 2. ZIP의 압축을 모두 풉니다.
 3. `Recheck` 폴더의 **`Recheck.exe`**를 실행합니다. 같은 위치의 `_internal` 폴더도 함께 유지하세요.
 
 앱 실행용 Python은 ZIP에 포함되어 있습니다. Git과 별도의 Python 설치는 소스 개발에만 사용합니다. 다른 PC의 GitHub 로그인이나 AI 연결은 이 PC로 옮겨지지 않으므로 AI 계정은 앱에서 별도로 연결하세요.
+
+## AI를 처음 연결하기
+
+새 사용자의 시작 경로는 **Gemini 무료**이며 모델은 Gemini 3.5 Flash-Lite입니다. **Gemini 무료로 시작하기**를 눌러 Google AI Studio에서 자신의 키를 만들고, 프로젝트가 Free tier인지 확인한 뒤 앱의 가려진 키 입력란에 저장합니다. 실제 기본 응답과 JSON 검증을 통과해야 선택한 분석 AI로 사용합니다. 키 발급부터 화면 순서까지 [Gemini 무료 연결 안내](GEMINI_FREE_SETUP.md)를 따르세요. 앱에 개발자 공용 키는 들어 있지 않습니다.
+
+GPT는 추천 선택으로 유지합니다. **ChatGPT로 연결하고 자동 설정**을 누르면 본인 계정으로 로그인할 수 있습니다. 기존 설치의 저장된 AI·모델·예산은 업데이트로 교체하지 않습니다.
+
+## AI 없이 ZIP 구성부터 비교하기
+
+**프로그램 비교 → ZIP·패키지 구성 파일 비교**에서 원본·변경본을 고르면 Docker나 AI 연결 없이 추가·삭제·내용 변경을 볼 수 있습니다. 결과는 JSON/HTML로 내보낼 수 있습니다. 동작 비교와 지원 범위가 다르므로 [패키지 비교 안내](PACKAGE_COMPARISON.md)를 확인하세요.
 
 ## 필요한 도구 설치
 

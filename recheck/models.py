@@ -79,11 +79,18 @@ class Settings(StrictModel):
         return self
 
 
+def initial_settings() -> Settings:
+    from .gemini_setup import new_free_profile
+
+    profile = new_free_profile(profile_id='gemini_free_default')
+    return Settings(ai_profiles=[profile], active_ai_profile=profile.profile_id)
+
+
 def load_settings(root=None) -> Settings:
     root = Path(root) if root is not None else data_root()
     path = root / 'settings.json'
     if not path.exists():
-        return Settings()
+        return initial_settings()
     try:
         value = json.loads(path.read_text(encoding='utf-8'))
         settings = Settings.model_validate(value)

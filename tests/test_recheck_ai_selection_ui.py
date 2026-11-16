@@ -121,7 +121,8 @@ def test_new_openai_and_compatible_profiles_default_to_json_prompt_without_overr
     remote(widget)
     assert widget.schema_mode.currentData() == 'native_schema'
     widget.new_profile()
-    assert widget.provider_combo.currentData() == 'openai'
+    assert widget.provider_combo.currentData() == 'gemini'
+    widget.provider_combo.setCurrentIndex(widget.provider_combo.findData('openai'))
     assert widget.schema_mode.currentData() == 'json_prompt'
     widget.provider_combo.setCurrentIndex(widget.provider_combo.findData('compatible'))
     assert widget.schema_mode.currentData() == 'json_prompt'

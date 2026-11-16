@@ -56,7 +56,8 @@ def test_first_run_shortcuts_and_result_empty_state(window, monkeypatch):
     widget.compare_shortcut.click()
     assert widget.navigation.currentRow() == 5
     assert widget.settings_tabs.currentWidget() is widget.provider_panel
-    assert len(pending) == 1
+    assert pending == [], 'Missing Gemini key opens guidance before any network work'
+    assert widget.provider_panel.gemini_api_key.isVisibleTo(widget.provider_panel)
     widget.provider_panel._operation_active = False
     widget.benchmark_shortcut.click()
     assert widget.navigation.currentRow() == 5

@@ -5,6 +5,8 @@
 사용자는 [처음 실행](FIRST_RUN.md), 개발자는 아래의 새 배포본 검증·교체 절차를 따릅니다.
 [공개 범위](PUBLICATION_SCOPE.md)와 [공개 이력 구성](PUBLIC_HISTORY.md)을 함께 따르세요.
 
+이 소스 버전은 **1.2.3-prototype.1**입니다. 실행 파일은 [정확한 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v1.2.3-prototype.1)의 `Recheck-1.2.3-prototype.1-Windows-x64.zip`을 사용합니다. 새 설치는 Gemini 3.5 Flash-Lite 무료 연결을 안내하며, 자신의 키 저장과 실제 응답 검증 전에는 연결되지 않습니다. 기존 AI 설정은 보존하고 GPT는 추천 선택으로 제공합니다. [Gemini 설정](GEMINI_FREE_SETUP.md)을 참고하세요.
+
 ## 실행 위치
 
 개발 저장소의 정식 배포 출력은 `dist/Recheck`이며 이 PC의 외부 실행 폴더는 `리체크 배포판 프로토타입`입니다. 두 위치는 검증한 하나의 staging에서 생성하고 EXE·리소스·환경 파일 전체의 크기와 SHA-256이 같아야 합니다. ZIP은 앱 폴더 밖에 둡니다. EXE의 Windows 속성 → 자세히에서 버전을, `_internal/RECHECK_SOURCE_IDENTITY.json`에서 소스 식별자를 확인합니다. 소스 push만으로 기존 EXE는 바뀌지 않습니다.
@@ -54,11 +56,14 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Output verification/
 | .NET PE | REA 관리 메서드·시그니처·CIL 비교 | 미지원 | CLR 로드·실행·C# 소스 복원 없음; 메서드 대응 범위와 바이트 차이를 구분 |
 | ELF 공유 라이브러리/x86/ARM | REA/Ghidra 기본 정적 비교 | 미지원 | 정적 분석 허용과 콘솔 실행 허용을 분리; 실측 지원 범위는 결과에서 확인 |
 | 단일 아키텍처 Mach-O | Linux REA/Ghidra 정적 비교 | 미지원 | x86/x64/ARM/ARM64 인식; universal/fat은 단일 아키텍처 파일 필요 |
+| ZIP·ZIP 기반 APK/JAR/MSIX/IPA 등 | 별도 구성 파일 비교 모드 | 미지원 | 경로·종류·크기·내용 SHA-256만 비교. 앱/서명/코드 의미는 검증하지 않음. [형식·상한](PACKAGE_COMPARISON.md) 참고 |
 | 소스·스크립트·알 수 없는 형식 | 미지원 | 미지원 | 확장자 변경으로 지원되지 않음 |
 
 동봉 Linux 컨테이너에서 PE를 실행하거나 첫 실행에서 Windows 이미지를 임의 빌드하지 않습니다. 오류·시간 초과·취소·출력 한도 초과·미지원은 일치나 0점으로 바꾸지 않고 측정 분모에서 제외합니다. 정적 누락·관계 범위·상한은 부분 상태로 남깁니다. 유사도는 휴리스틱이며 유한 입력 일치는 모든 입력의 동등성 증명이 아닙니다.
 
 자동 비교는 먼저 REA 정적 분석을 진행합니다. 실행 지원이 없는 파일은 실행 단계를 차단하고 정적 근거·보고서를 남깁니다. `--mode static`으로 정적 비교만 선택할 수도 있습니다. .NET과 네이티브 코드는 서로 다른 근거이므로 같은 함수 유사도로 섞어 비교하지 않습니다. REA에 다른 APK·Electron·펌웨어 등의 도구가 존재하더라도 이 앱의 비교 스키마에 연결되지 않은 형식까지 지원한다고 표시하지 않습니다.
+
+ZIP 구성 비교는 위 프로그램 분석과 별도 모드입니다. 파일을 디스크에 추출하거나 실행하지 않고 AI도 호출하지 않습니다. 두 파일의 전체 수집이 끝나야 추가·삭제·변경·유지를 계산합니다. 손상·미지원·취소·한도 초과는 같다는 결과로 바꾸지 않습니다.
 
 ## 검증 수준
 

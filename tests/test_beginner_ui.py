@@ -47,14 +47,14 @@ def test_simple_view_starts_with_chatgpt_and_hides_technical_controls(beginner_p
     assert not widget.details_scroll.isHidden()
 
 
-def test_new_connection_defaults_to_login_and_complete_analysis(beginner_panel):
+def test_new_connection_defaults_to_unconnected_gemini_without_consent_or_shared_key(beginner_panel):
     widget, _, _ = beginner_panel
     widget.new_profile()
     values = widget.profile_values()
-    assert values['provider'] == 'openai' and values['auth_mode'] == 'chatgpt'
-    assert values['model'] == 'gpt-6.1-sol'
-    assert values['enabled'] and values['external_consent']
-    assert set(values['allowed_evidence']) == {'runtime', 'static', 'code'}
+    assert values['provider'] == 'gemini' and values['auth_mode'] == 'api_key'
+    assert values['model'] == 'gemini-3.5-flash-lite'
+    assert not values['enabled'] and not values['external_consent']
+    assert not values['credential_ref'] and not values['allowed_evidence']
     assert values['options']['max_requests'] == 5
 
 
@@ -76,6 +76,8 @@ def test_one_click_runs_the_complete_connection_flow_and_updates_the_screen(begi
 def test_chatgpt_login_in_details_also_finishes_model_selection(beginner_panel, app):
     widget, manager, pending = beginner_panel
     widget.new_profile()
+    widget.provider_combo.setCurrentIndex(widget.provider_combo.findData('openai'))
+    widget.auth_combo.setCurrentIndex(widget.auth_combo.findData('chatgpt'))
     widget.login()
     assert len(pending) == 1
     work, done = pending.pop()

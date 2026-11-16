@@ -23,6 +23,9 @@ build/
 
 # Share reviewed guides; machine-specific diagnostics and historical QA stay local.
 /docs/*
+!/docs/GEMINI_FREE_SETUP.md
+!/docs/PACKAGE_COMPARISON.md
+!/docs/ROADMAP.md
 !/docs/AI_CONNECTIONS.md
 !/docs/AI_AUTH_STATUS.md
 !/docs/UX_UPGRADE_20261115.md
