@@ -103,4 +103,6 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 자세한 협업·검사·배포 절차는 [GitHub 작업 안내](docs/GITHUB_WORKFLOW.md)를 참고하세요. 중단 지점, REA 기능별 구현 범위와 남은 일은 [프로젝트 상태](docs/PROJECT_STATUS.md)에 정리했습니다.
 
+팀원은 [기여·개발 기록 안내](CONTRIBUTING.md)부터 읽고 작업 브랜치와 PR을 준비하세요. 중요한 선택과 채택·보류한 대안은 [설계 결정 기록(ADR)](docs/decisions/README.md)에 남깁니다. [내장 로그인 실험](experiments/embedded_login/README.md)은 별도 브랜치의 검증용 코드이며 현재 배포 기능에 포함되지 않습니다.
+
 실행 ZIP은 **Releases**에서 제공합니다. **Packages**는 Docker 이미지·개발용 의존성을 위한 별도 레지스트리이며 현재 사용하지 않습니다. `No packages published`는 실행 ZIP이 없다는 뜻이 아닙니다.
