@@ -1,12 +1,12 @@
 # Recheck 프로젝트 코드 감사·품질 개선 보고서
 
-2026-11-17. 기준 소스는 `v0.1.4 / 5d561f7b57aca6b21d1de8d2307113b61825d32c`, 개선 버전은 **0.1.5**다. 검사·수정·소스 재검증은 완료했으며, 이 문서의 배포 검증 항목은 실제 결과가 확보될 때 갱신한다. 개인 분석 원본·계정·키·모델·가상환경은 공개하지 않는다.
+2026-11-17. 기준 소스는 `v0.1.4 / 5d561f7b57aca6b21d1de8d2307113b61825d32c`, 개선 버전은 **0.1.5**다. 검사·수정·소스 재검증·새 Windows native 배포 검증을 수행했다. 실제 게시 상태와 최종 commit은 [0.1.5 릴리즈](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)에서 확인한다. 개인 분석 원본·계정·키·모델·가상환경은 공개하지 않는다.
 
 ## 프로젝트와 검사 범위
 
 Python >=3.11, PySide6/Qt GUI, 공통 Engine/CLI, Pydantic/JSON Schema, HTTP AI 제공자, SQLite/JSON 이력, Docker 실행·REA/Ghidra 정적 worker, PyInstaller Windows 배포로 구성된다. ZIP 비교는 AI/Docker와 독립적이다. GUI/CLI→사전 준비 확인→스냅샷→선택한 정적/실행 단계→근거·비교→선택 AI→이력·보고서 흐름이다.
 
-기준 Git 파일은 **271개**, Python **189개**다. 변경 후 수치는 최종 Git 인벤토리에서 갱신한다. 기준 Python 전부를 AST로 파싱했고 구문 오류는 0이었다. 전 소스에 Ruff 정적 검사를 적용하고, 주요 제품 모듈·제공자 8개·스크립트 27개·시작/빌드/배포 정의·CI·문서를 나누어 수동 검토했다. 모든 기존 테스트를 사람이 전수 정독했다는 뜻은 아니다. 새 회귀와 변경 경계의 기존 테스트는 직접 읽고 실행했다.
+기준 Git 파일은 **271개**, Python **189개**, 최종은 **285개/194개**다. 최종 Python 60,799줄을 AST로 파싱했고 구문 오류는 0이었다. 전 소스에 Ruff 정적 검사를 적용하고, 제품 모듈 48개와 제공자 8개 중 주요 모듈·스크립트 27개·시작/빌드/배포 정의·CI·문서를 나누어 수동 검토했다. 모든 기존 테스트를 사람이 전수 정독했다는 뜻은 아니다. 새 회귀와 변경 경계의 기존 테스트는 직접 읽고 실행했다.
 
 검증4는 전체 **20,566개 파일**의 인벤토리를 만들고 제안·검증 Markdown 15개 전체, 소스/릴리즈 metadata와 관련 원시 JSON·하네스·실패 fixture를 대조했다. `.venv` 8,936개, pytest 임시 파일 6,090개, Git 내부 282개, 캐시·동봉 바이너리·추출 릴리즈 등은 의존성/생성물로 분류했다. 실행 파일을 텍스트 소스로 읽거나 외부 패키지 전체를 자사 코드로 감사했다고 주장하지 않는다.
 
@@ -41,7 +41,7 @@ Python >=3.11, PySide6/Qt GUI, 공통 Engine/CLI, Pydantic/JSON Schema, HTTP AI 
 | OSV-Scanner 2.7.1 | Python 36개, Node 기준238개/변경237개 검사. 취약 패키지 **3→1** | 남은 minimatch10.2.6은 optional frida 경로. 전체 lock에는 남고 제품 설치에서 제외 |
 | npm audit | 전체 lock **6개(높음2)→3개(높음0)**, optional 제외 실제 runtime **0** | meta-vulnerability 포함 수치. full-lock 경고를 0이라고 보고하지 않는다 |
 | OpenSSF Scorecard 5.6.0 | 인증 후 원격 기준 SHA에서 **2.8/10** 실제 수집 | 첫 무인증 시도는 quota로 중단. 신규 저장소 이력/배지/기여자 수와 도구의 workflow 인식 한계가 포함되어 제품 정확도 점수로 해석하지 않음 |
-| CodeQL | Python/JavaScript GitHub CI 구성·SHA pin | 실제 원격 실행 결과는 최종 CI 항목에서 갱신 |
+| CodeQL 2.27.4 | 원격 Python/JavaScript 분석 실행 성공. JavaScript 결과0, Python 표시2 | Python2개는 공개 OAuth client_id를 이름의 oauth 문자열 때문에 password로 오인한 흐름으로 분류. 실제 secret/token 유출로 계승하지 않으며 아래 근거와 구분 |
 | SonarQube | MCP 구성·도구·기존 연결 확인, 미설정으로 **미실행** | 승인 없는 새 외부 분석 서버 업로드는 안 함. Ruff/AST/수동 검토/CodeQL로 대체하되 Sonar 점수·부채·Quality Gate는 미측정 |
 
 REA는 Node24.22.1 지원을 확인한 호환 minor **6.7.0→6.9.0**으로 고정 업데이트했다. 선택 frida는 현재 제품의 정적 비교에 필요하지 않아 Docker에서 `--omit=optional --ignore-scripts`로 제외했다. 이전6.7 이미지 ID는 새 소스의 승인 근거로 재사용하지 않는다. 새 source-context hash·immutable image receipt를 실제 생성했다.
@@ -49,6 +49,8 @@ REA는 Node24.22.1 지원을 확인한 호환 minor **6.7.0→6.9.0**으로 고�
 실제 업데이트 시험에서 REA6.9 기본 summary 응답으로 의사코드 수집0을 재현했다. worker가 `detail=complete`를 명시하고 패키지 manifest에서 실제 버전을 읽도록 수정한 뒤 양쪽 **32함수 목록/23 dossier·의사코드 성공**을 확인했다. 일부 함수 CFG 및 inventory relationship coverage는 여전히 partial이며 숨기지 않는다. 기록된 main 의사코드에서 알려진 mutant 분기 차이를 확인했다.
 
 HTTP/OAuth/credentials/process/agent 경계에서는 DPAPI, origin/profile 결합, PKCE/state/nonce/서명, redirect/proxy 차단, 입력 allowlist, 출력/시간/예산/프로세스 소유권을 검토했다. 별도 신규 재현 P0는 없었다. 이는 무결점·적대적 입력 완전 격리 증명이 아니다.
+
+CodeQL의 두 경고는 `ProfileManager.account_status`의 공개 `oauth_client_id`→JSON→정상/Unicode stdout 두 경로다. 경고 경로에 `get_secret_value`, client_secret, 토큰 저장소 값의 출력은 없었다. 동일 CodeQL 버전의 sensitive-name heuristic은 oauth 문자열을 민감값 후보로 취급한다. [RFC6749 §2.2](https://www.rfc-editor.org/rfc/rfc6749#section-2.2)의 공개 client identifier와 인증 비밀값을 구별하여 오탐으로 분류했다. 실제 비밀값 경고를 숨기기 위한 소스 예외·전역 rule 비활성화는 추가하지 않았다.
 
 ## 구조·성능·유지보수
 
@@ -62,7 +64,12 @@ CI는 기존 필수 job `tests`를 유지하고 Ruff·JUnit 보관, Python/Node 
 
 - 기준 소스: Python **1,715 통과/1 skip**, Node **7 통과**.
 - 최종 소스 gate: **Python3.14.8 / 1,816 통과·1 skip**, Node **7 통과**. 검사 전후 runtime와 테스트·CI 입력 hash 불변을 확인하고 source identity를 갱신했다.
-- frozen EXE/GUI·실제 고정 oracle·ZIP/서버 hash·정확한 SHA CI: **진행 중**, 실제 결과 확보 후 아래에 갱신한다.
+- 실제 source 고정 oracle: **355쌍/426실행, 차이19/19, 미측정0, 오탐0, 누락0, oracle 실패0**. 저장 오류·반환/디스크 snapshot 불일치0. timeout/flood/child는 미측정으로 남고 소유 컨테이너 제거를 확인했다. 첫 두 시작 시도는 잘못 지정한 compiler tag로 실패했고, 실제 존재하는 고정 compiler image를 확인한 세 번째 새 폴더에서 전체 측정했다.
+- 새 frozen EXE: 실제 Windows GUI 시작·화면 확인·bundled Python 도구 탐색·명시적 Docker 소스 준비·동적3입력 **2일치/1차이** 및 literal stdout/stderr/종료코드/실측 이미지 ID 대조 통과.
+- frozen 회귀: 보존 손상 ZIP4종 모두 CLI2/package_invalid, 정상 bounded ZIP 동일 판정, 과거 Server=null JSON의 hash 불변·HTML 생성. 저장한 불일치1입력을 새 run으로 재검사하고 차이 유지·원본 run/저장 suite 불변·원문 제외 실패 JSON 내보내기 확인.
+- 검증한 배포 파일 **466개**, staging→`dist/Recheck`→ZIP 전체 inventory/hash 대조. ZIP **114,843,455 bytes**, SHA256 `8b56d4067a8d164b5bbfe3782e899018c4b4527a8162e32b0e93974c207af842`. EXE SHA256 `fee13c65762fdfbcd4128d5a43f1dd02c41e25c54ee288c9b9deca2a2b272af4`.
+- source aggregate `17f270762643b8e1a4c9dc13140fe3779db39edfd7a6d28b45397677e7cef300`. 실제 static image `sha256:053d8fceb1c9d65dd89a2a1cc229cc6855ed59a45d1836b715ae7d4ea0f24fb3`, execution image `sha256:7efbef23468bb6c68fdbd59dcdc900fedd04df772f265d18dc0ad894f3279ca1`. 이미지는 ZIP에 동봉하지 않는다.
+- [PR7](https://github.com/leekmny/Recheck/pull/7)의 제품 소스 `aebaa91e82e129049f7f3df8fa80991d0afc9124`에서 [Unit tests](https://github.com/leekmny/Recheck/actions/runs/44038656055)·[Security analysis](https://github.com/leekmny/Recheck/actions/runs/44038656285) 둘 다 성공. 보고서 보완/병합 후 head도 두 workflow gate를 다시 확인하여 게시한다. 서버 ZIP SHA/크기는 게시 guard가 로컬 값과 대조하며 최종 릴리즈의 asset digest로 확인한다.
 - 정적 source 실측은 **partial**이며 의사코드23/23과 CFG14/23을 구분한다. AI는 이번 실제 검사에서 호출하지 않았다.
 
 ## 남은 범위
