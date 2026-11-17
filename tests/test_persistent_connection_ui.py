@@ -298,5 +298,6 @@ def test_fresh_authorization_retry_requests_approval_without_claiming_success(pa
                                 'connection_attempt': widget._operation_id})
     assert '새 인증 요청' in widget.quick_progress.text()
     assert '승인해 주세요' in widget.quick_progress.text()
-    assert widget.connection_steps[0].text().startswith('● ')
+    assert widget.connection_steps[0].text().startswith('✓ ')
+    assert widget.connection_steps[1].text().startswith('● ')
     assert not widget.connection_steps[1].text().startswith('✓ ')

@@ -95,6 +95,7 @@ def pump(app, condition):
 
 def test_provider_console_is_native_and_does_not_store_or_select_any_key(panel):
     widget, manager, pending, _ = panel
+    widget.embedded_login_check.setChecked(True)
     widget.begin_provider_setup('deepseek', open_browser=True)
     assert widget.onboarding_key.echoMode() == QLineEdit.EchoMode.Password
     assert widget._browser_dialog.calls[0] == (
@@ -107,6 +108,7 @@ def test_gemini_key_page_uses_app_browser_without_opening_system_browser(panel, 
     from PySide6.QtGui import QDesktopServices
 
     widget, manager, pending, _ = panel
+    widget.embedded_login_check.setChecked(True)
     monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: pytest.fail('implicit external browser'))
     widget.open_gemini_key_page()
     assert widget._browser_dialog.calls[0] == (
@@ -151,6 +153,7 @@ def test_worker_url_is_presented_on_gui_thread_and_never_sent_to_progress(panel,
     from recheck.setup_flow import ChatGPTSetup
 
     widget, manager, pending, _ = panel
+    widget.embedded_login_check.setChecked(True)
     public_events = []
     outcomes = []
     entered = threading.Event()
@@ -184,6 +187,7 @@ def test_a_cancelled_queued_url_cannot_reopen_browser(panel, app, monkeypatch):
     from recheck.setup_flow import ChatGPTSetup
 
     widget, _, pending, _ = panel
+    widget.embedded_login_check.setChecked(True)
     entered = threading.Event()
     holder = {}
     outcomes = []
@@ -234,6 +238,7 @@ def test_failed_new_key_preserves_the_selected_profiles_existing_credential(pane
 
 def test_starting_key_verification_clears_the_unbound_console_session(panel):
     widget, _, pending, _ = panel
+    widget.embedded_login_check.setChecked(True)
     widget.begin_provider_setup('deepseek', open_browser=True)
     widget.onboarding_key.setText('fixture-key')
     widget.onboarding_consent.setChecked(True)
@@ -265,6 +270,7 @@ def test_login_location_choice_controls_the_presenter_without_changing_the_actio
     from recheck.setup_flow import ChatGPTSetup
 
     widget, _, pending, _ = panel
+    assert not widget.embedded_login_check.isChecked()
     observed = []
 
     async def connect(setup, pid, *, cancel=None, on_event=None, on_url=None):
@@ -277,3 +283,48 @@ def test_login_location_choice_controls_the_presenter_without_changing_the_actio
     work, done = pending.pop()
     done(asyncio.run(work(threading.Event(), lambda event: None)))
     assert observed == [embedded]
+
+
+@pytest.mark.parametrize('preset, url', [
+    ('gemini', 'https://aistudio.google.com/apikey'),
+    ('openai', 'https://platform.openai.com/api-keys'),
+    ('grok', 'https://console.x.ai/team/default/api-keys'),
+    ('deepseek', 'https://platform.deepseek.com/api_keys'),
+    ('claude', 'https://platform.claude.com/settings/keys'),
+])
+def test_official_key_page_uses_external_default_without_changing_connection(panel, monkeypatch, preset, url):
+    from PySide6.QtGui import QDesktopServices
+
+    widget, manager, pending, folder = panel
+    opened = []
+    before = (folder / 'settings.json').read_bytes()
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda target: opened.append(target.toString()) or True)
+    assert widget.begin_provider_setup(preset, open_browser=True)
+    assert opened == [url] and widget._browser_dialog is None
+    assert widget.embedded_login_check.isVisible()
+    assert pending == [] and manager.selected_profile_id() == 'legacy-local'
+    assert (folder / 'settings.json').read_bytes() == before
+
+
+def test_external_key_page_failure_is_visible_and_does_not_fall_back_to_embedded(panel, monkeypatch):
+    from PySide6.QtGui import QDesktopServices
+
+    widget, _, pending, _ = panel
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda _: False)
+    assert widget.begin_provider_setup('gemini', open_browser=True) is False
+    assert widget._browser_dialog is None and pending == []
+    assert '열지 못했습니다' in widget.status.text()
+
+
+@pytest.mark.parametrize('external_opened', [True, False])
+def test_switching_to_external_console_retires_embedded_only_after_launch_succeeds(panel, monkeypatch, external_opened):
+    from PySide6.QtGui import QDesktopServices
+
+    widget, _, _, _ = panel
+    widget.embedded_login_check.setChecked(True)
+    assert widget.begin_provider_setup('deepseek', open_browser=True)
+    previous = widget._browser_dialog
+    widget.embedded_login_check.setChecked(False)
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda _: external_opened)
+    assert widget.begin_provider_setup('openai', open_browser=True) is external_opened
+    assert previous.active is not external_opened

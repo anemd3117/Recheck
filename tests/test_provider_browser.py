@@ -266,6 +266,112 @@ def test_different_authorization_operation_still_cancels_the_previous_worker(bro
     assert dialog._active and dialog._attempt_id == 'b' and not sessions[-1].disposed
 
 
+class ResettableSession(FakeSession):
+    def __init__(self, parent, **callbacks):
+        super().__init__(parent, **callbacks)
+        self.parent = parent
+        self.retired_callbacks = []
+        self.reset_count = 0
+
+    def reset_pages(self, **callbacks):
+        self.retired_callbacks.append(self.callbacks)
+        self.widget.deleteLater()
+        self.widget = QWidget(self.parent)
+        self.callbacks = callbacks
+        self.loaded = []
+        self.reset_count += 1
+
+
+@pytest.mark.parametrize('ending', ['finish', 'cancel', 'shutdown', 'external', 'different', 'console'])
+def test_same_operation_retains_resettable_backend_but_terminal_paths_dispose_it(app, ending):
+    sessions, opened, cancelled = [], [], []
+
+    def factory(parent, **callbacks):
+        session = ResettableSession(parent, **callbacks)
+        sessions.append(session)
+        return session
+
+    dialog = module().ProviderBrowserDialog(
+        browser_factory=factory, external_opener=lambda url: opened.append(url.toString()) or True
+    )
+    dialog.cancelled.connect(cancelled.append)
+    assert dialog.open_authorization(AUTH, provider='chatgpt', attempt_id='a')
+    session = sessions[-1]
+    old_callbacks = session.callbacks
+    fresh = AUTH.replace('private-state', 'fresh-state').replace('49123', '49124')
+    assert dialog.open_authorization(fresh, provider='chatgpt', attempt_id='a')
+    assert sessions == [session] and session.reset_count == 1 and not session.disposed
+    assert cancelled == [] and session.loaded == [fresh]
+    assert '기존 웹 로그인 상태' in dialog.status.text()
+    before = dialog.status.text(), dialog.location.text()
+    old_callbacks['failed']()
+    old_callbacks['location_changed']('https://old.invalid')
+    old_callbacks['load_finished'](False)
+    assert before == (dialog.status.text(), dialog.location.text())
+    assert old_callbacks['allow_navigation'](CALLBACK) is False
+    assert session.callbacks['allow_navigation'](CALLBACK) is False
+    assert session.callbacks['allow_navigation'](CALLBACK.replace('49123', '49124')) is True
+    if ending == 'finish':
+        dialog.finish_attempt('a')
+    elif ending == 'cancel':
+        dialog.cancel_attempt('a')
+    elif ending == 'shutdown':
+        dialog.shutdown()
+    elif ending == 'external':
+        dialog.external_button.click()
+        assert opened == [fresh]
+    elif ending == 'different':
+        dialog.open_authorization(AUTH, provider='chatgpt', attempt_id='b')
+    else:
+        dialog.open_console('gemini', CONSOLE, 'Gemini')
+    assert session.disposed
+    assert cancelled == (['a'] if ending in ('cancel', 'shutdown', 'different', 'console') else [])
+    dialog.shutdown()
+    delete(dialog)
+
+
+def test_same_operation_without_reset_api_uses_accurate_fresh_profile_copy(browser):
+    dialog, sessions, _ = browser
+    dialog.open_authorization(AUTH, provider='chatgpt', attempt_id='a')
+    dialog.open_authorization(AUTH, provider='chatgpt', attempt_id='a')
+    assert len(sessions) == 2 and sessions[0].disposed
+    assert '기존 웹 로그인 상태' not in dialog.status.text()
+    assert '새 인증 요청' in dialog.status.text()
+
+
+def test_reset_failure_discards_profile_and_keeps_only_explicit_native_fallback(app):
+    sessions, opened, cancelled = [], [], []
+
+    class BrokenReset(ResettableSession):
+        def reset_pages(self, **callbacks):
+            self.widget.deleteLater()
+            self.widget = None
+            raise RuntimeError('private-reset-failure')
+
+        def dispose(self):
+            self.disposed = True
+
+    def factory(parent, **callbacks):
+        session = BrokenReset(parent, **callbacks)
+        sessions.append(session)
+        return session
+
+    dialog = module().ProviderBrowserDialog(
+        browser_factory=factory, external_opener=lambda url: opened.append(url.toString()) or True
+    )
+    dialog.cancelled.connect(cancelled.append)
+    dialog.open_authorization(AUTH, provider='chatgpt', attempt_id='a')
+    old = sessions[-1]
+    old_callbacks = old.callbacks
+    assert dialog.open_authorization(AUTH, provider='chatgpt', attempt_id='a')
+    assert old.disposed and dialog._session is None
+    assert dialog._active and dialog.external_button.isEnabled() and opened == [] and cancelled == []
+    assert old_callbacks['allow_navigation'](CALLBACK) is False
+    assert '기존 웹 로그인 상태' not in dialog.status.text() and 'private' not in dialog.status.text()
+    dialog.shutdown()
+    delete(dialog)
+
+
 def test_shutdown_clears_private_urls_and_is_idempotent(browser):
     dialog, sessions, opened = browser
     cancelled = []
@@ -548,3 +654,110 @@ def test_real_webengine_hides_only_unsupported_google_login_on_synthetic_pages()
     assert evidence == dict(trusted=True, preserved=True, input_reads=0, rerender=True,
                            restored_on_account_route=True, boundaries=True,
                            chooser_preserved=True, script_configuration=True)
+
+
+_PROFILE_RETENTION_FIXTURE_PROBE = r'''
+import json
+import time
+from urllib.parse import urlencode
+from PySide6.QtCore import QEventLoop, Qt, QTimer, QUrl
+from PySide6.QtNetwork import QNetworkCookie
+from PySide6.QtWidgets import QApplication
+QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+from PySide6.QtWebEngineCore import QWebEnginePage
+from shiboken6 import isValid
+from recheck.provider_browser import ProviderBrowserDialog, _WebEngineSession
+
+app = QApplication([])
+sessions, rounds, cancelled = [], [], []
+
+class OwnedSession(_WebEngineSession):
+    def __init__(self, parent, **callbacks):
+        rounds.append(callbacks)
+        super().__init__(parent, **callbacks)
+
+    def reset_pages(self, **callbacks):
+        rounds.append(callbacks)
+        super().reset_pages(**callbacks)
+
+    def navigate(self, url):
+        self.widget.setUrl(QUrl('about:blank'))
+
+def factory(parent, **callbacks):
+    session = OwnedSession(parent, **callbacks)
+    sessions.append(session)
+    return session
+
+def wait_until(condition):
+    deadline = time.monotonic() + 3
+    while not condition() and time.monotonic() < deadline:
+        loop = QEventLoop()
+        QTimer.singleShot(20, loop.quit)
+        loop.exec()
+    return bool(condition())
+
+def auth(port, state):
+    return 'https://auth.openai.com/api/accounts/authorize?' + urlencode({
+        'redirect_uri': 'http://127.0.0.1:' + str(port) + '/auth/callback', 'state': state})
+
+dialog = ProviderBrowserDialog(browser_factory=factory)
+dialog.cancelled.connect(cancelled.append)
+assert dialog.open_authorization(auth(49123, 'owned-first'), provider='chatgpt', attempt_id='owned')
+session = sessions[-1]
+profile, old_page = session.profile, session._pages[0]
+old_callbacks = rounds[-1]
+popup_page = old_page.createWindow(QWebEnginePage.WebWindowType.WebBrowserWindow)
+cookie_matches, cookie_removals = [], []
+cookie_store = profile.cookieStore()
+
+def cookie_added(cookie):
+    if bytes(cookie.name()) == b'recheck-owned-fixture':
+        cookie_matches.append(bytes(cookie.value()) == b'local-only' and cookie.isHttpOnly())
+
+def cookie_removed(cookie):
+    if bytes(cookie.name()) == b'recheck-owned-fixture':
+        cookie_removals.append(bytes(cookie.value()) == b'local-only' and cookie.isHttpOnly())
+
+cookie_store.cookieAdded.connect(cookie_added)
+cookie = QNetworkCookie(b'recheck-owned-fixture', b'local-only')
+cookie.setHttpOnly(True)
+cookie.setSecure(True)
+cookie.setDomain('.auth.openai.com')
+cookie.setPath('/')
+cookie_store.setCookie(cookie, QUrl('https://auth.openai.com'))
+assert wait_until(lambda: len(cookie_matches) > 0), 'Owned synthetic cookie was not initialized'
+assert dialog.open_authorization(auth(49124, 'owned-fresh'), provider='chatgpt', attempt_id='owned')
+current = sessions[-1]
+same_profile = current.profile is profile and not session._disposed
+current.profile.cookieStore().cookieRemoved.connect(cookie_removed)
+current.profile.cookieStore().deleteCookie(cookie, QUrl('https://auth.openai.com'))
+cookie_survived = wait_until(lambda: len(cookie_removals) > 0) and all(cookie_removals)
+snapshot = dialog.status.text(), dialog.location.text()
+old_callbacks['failed']()
+old_callbacks['location_changed'](QUrl('https://old.invalid'))
+stale_denied = (snapshot == (dialog.status.text(), dialog.location.text()) and
+    old_callbacks['allow_navigation'](QUrl('http://127.0.0.1:49123/auth/callback')) is False)
+fresh_guard = rounds[-1]['allow_navigation'](QUrl('http://127.0.0.1:49124/auth/callback'))
+old_pages_destroyed = not isValid(old_page) and not isValid(popup_page)
+temporary = profile.isOffTheRecord() if isValid(profile) else False
+dialog.finish_attempt('owned')
+profile_destroyed = not isValid(profile) and current.profile is None
+print(json.dumps(dict(same_profile=same_profile, cookie_survived=cookie_survived,
+    old_pages_destroyed=old_pages_destroyed, stale_denied=stale_denied, fresh_guard=fresh_guard,
+    temporary=temporary, profile_destroyed=profile_destroyed, worker_not_cancelled=cancelled == [])), flush=True)
+'''
+
+
+@pytest.mark.skipif(not os.environ.get('RECHECK_WEBENGINE_FIXTURE_PYTHON'),
+                    reason='Explicit isolated WebEngine fixture interpreter is required')
+def test_real_webengine_same_operation_retains_owned_httponly_cookie_and_retires_pages():
+    result = subprocess.run(
+        [os.environ['RECHECK_WEBENGINE_FIXTURE_PYTHON'], '-c', _PROFILE_RETENTION_FIXTURE_PROBE],
+        cwd=Path(__file__).resolve().parents[1], env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
+        text=True, capture_output=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1]) == dict(
+        same_profile=True, cookie_survived=True, old_pages_destroyed=True, stale_denied=True,
+        fresh_guard=True, temporary=True, profile_destroyed=True, worker_not_cancelled=True,
+    )

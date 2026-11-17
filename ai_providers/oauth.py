@@ -31,6 +31,7 @@ from pydantic import SecretStr
 
 from .contracts import emit
 from .credentials import AuthError, canonical_origin
+from .oauth_callback import CALLBACK_CSP, callback_document
 
 _PROVIDERS = {
     'chatgpt': dict(
@@ -733,11 +734,7 @@ class OAuthService:
             ):
                 pass
             finally:
-                body = (
-                    '로그인 요청을 확인했습니다. 앱으로 돌아가세요.'
-                    if status == 200
-                    else '유효한 로그인 콜백이 아닙니다. 앱에서 다시 확인하세요.'
-                ).encode('utf-8')
+                body = callback_document(status == 200)
                 try:
                     writer.write(
                         (
@@ -745,7 +742,9 @@ class OAuthService:
                             + str(status)
                             + ' '
                             + ('OK' if status == 200 else 'Bad Request')
-                            + '\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nContent-Security-Policy: default-src \'none\'\r\nConnection: close\r\nContent-Length: '
+                            + '\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Security-Policy: '
+                            + CALLBACK_CSP
+                            + '\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\nContent-Length: '
                             + str(len(body))
                             + '\r\n\r\n'
                         ).encode('ascii')

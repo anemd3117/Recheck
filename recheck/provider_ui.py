@@ -136,12 +136,10 @@ class ProviderPanel(QWidget):
         frame.addWidget(label('AI 연결', 'pageTitle'))
         self.setup_scroll = QScrollArea()
         self.setup_scroll.setWidgetResizable(True)
-        self.setup_scroll.setAccessibleName('Gemini 기본 연결과 GPT 추천 전체 안내')
+        self.setup_scroll.setAccessibleName('ChatGPT 추천과 Gemini 무료 API 연결 안내')
         setup_content = QWidget()
         outer = QVBoxLayout(setup_content)
         frame.addWidget(self.setup_scroll)
-        self._build_connection_card(outer)
-        self._build_gemini_card(outer)
         quick = QGroupBox('추천 · ChatGPT로 시작하기')
         quick_layout = QVBoxLayout(quick)
         self.quick_summary = label(
@@ -157,7 +155,8 @@ class ProviderPanel(QWidget):
         quick_layout.addWidget(
             label(
                 '비교에 필요한 입력·실행 결과·선택한 함수 정보를 GPT에 전달하는 설정을 적용합니다. '
-                '연결 확인에는 짧은 AI 요청이 최대 4회 발생합니다. ChatGPT 이용 한도가 적용됩니다.',
+                '연결 확인에는 짧은 AI 요청이 최대 4회 발생합니다. ChatGPT 이용 한도가 적용됩니다. '
+                '계정 로그인과 AI 사용 권한은 별도이며, 선택한 계정·워크스페이스에서 사용을 허용해야 합니다.',
                 'muted',
             )
         )
@@ -175,6 +174,8 @@ class ProviderPanel(QWidget):
         )
         quick_layout.addWidget(self.quick_progress)
         outer.addWidget(quick)
+        self._build_gemini_card(outer)
+        self._build_connection_card(outer)
         self.details_toggle = QPushButton('다른 AI 사용 · 세부 설정')
         self.details_toggle.setCheckable(True)
         outer.addWidget(self.details_toggle)
@@ -457,13 +458,13 @@ class ProviderPanel(QWidget):
         for preset in CONNECTION_PRESETS:
             self.onboarding_combo.addItem(preset.title, preset.id)
         box.addWidget(self.onboarding_combo)
-        self.embedded_login_check = QCheckBox('ChatGPT 로그인 화면을 앱 안에서 열기')
-        self.embedded_login_check.setChecked(True)
+        self.embedded_login_check = QCheckBox('로그인·키 발급 화면을 앱 안에서 열기')
+        self.embedded_login_check.setChecked(False)
         box.addWidget(self.embedded_login_check)
         box.addWidget(label(
-            '공식 사이트에서 직접 로그인하거나 개인 API 키를 발급하세요. '
-            '내장 로그인이 제한되면 이유를 확인하고 기본 브라우저에서 계속할 수 있습니다. '
-            'ChatGPT 공식 연동 안내는 시스템 브라우저를 기준으로 합니다.', 'muted'))
+            '로그인과 키 발급은 기본 브라우저에서 진행합니다. '
+            '위 항목을 체크하면 앱 안에서 열 수 있습니다. '
+            'Google 인증은 내장 창에서 제한되며, ChatGPT 공식 연동도 기본 브라우저를 기준으로 합니다.', 'muted'))
         self.onboarding_open = QPushButton('ChatGPT 로그인')
         self.onboarding_open.setObjectName('primary')
         box.addWidget(self.onboarding_open)
@@ -596,7 +597,7 @@ class ProviderPanel(QWidget):
         key_mode = preset_id not in ('chatgpt', 'gemini')
         for control in (self.onboarding_key, self.onboarding_consent, self.onboarding_connect):
             control.setVisible(key_mode)
-        self.embedded_login_check.setVisible(preset_id == 'chatgpt')
+        self.embedded_login_check.setVisible(True)
         for control in (self.chatgpt_saved_summary, self.chatgpt_verify_button,
                         self.chatgpt_relogin_button, self.chatgpt_logout_button,
                         self.chatgpt_continue_button):
@@ -626,7 +627,25 @@ class ProviderPanel(QWidget):
         preset = connection_preset(self.onboarding_combo.currentData())
         if preset.id == 'chatgpt':
             return self.quick_connect()
-        return self._get_browser().open_console(preset.id, preset.key_url, preset.title)
+        return self._open_key_page(preset.id)
+
+    def _open_key_page(self, preset_id):
+        from .provider_onboarding import connection_preset
+
+        preset = connection_preset(preset_id)
+        if self.embedded_login_check.isChecked():
+            return self._get_browser().open_console(preset.id, preset.key_url, preset.title)
+        try:
+            opened = QDesktopServices.openUrl(QUrl(preset.key_url))
+        except Exception:
+            opened = False
+        if not opened:
+            self._message('기본 브라우저에서 공식 키 발급 페이지를 열지 못했습니다. 기본 브라우저 설정을 확인해 주세요.')
+            return False
+        if self._browser_dialog is not None:
+            self._browser_dialog.shutdown()
+        self._message('기본 브라우저에서 공식 키 발급 페이지를 열었습니다. 발급한 키를 Recheck의 보안 입력란에 입력해 주세요.')
+        return True
 
     def connect_selected_preset(self, *_):
         secret = self.onboarding_key.text()
@@ -680,7 +699,7 @@ class ProviderPanel(QWidget):
                            done, failure_provider='api_key')
 
     def _build_gemini_card(self, outer):
-        self.gemini_card = QGroupBox('기본 · Gemini 무료로 시작하기')
+        self.gemini_card = QGroupBox('Gemini 무료(API)')
         layout = QVBoxLayout(self.gemini_card)
         self.gemini_summary = label(
             'Google AI Studio에서 무료 프로젝트의 API 키를 만들고 연결하세요.'
@@ -756,12 +775,7 @@ class ProviderPanel(QWidget):
     def open_gemini_key_page(self, *_):
         if self._blocked():
             return False
-        if not self._get_browser().open_console('gemini', 'https://aistudio.google.com/apikey', 'Gemini API 키'):
-            self._gemini_message(
-                'Gemini 키 만들기 화면을 열지 못했습니다. 연결 창의 기본 브라우저 선택을 사용할 수 있습니다.'
-            )
-            return False
-        return True
+        return self._open_key_page('gemini')
 
     def open_gemini_setup(self, *_):
         """키 입력 안내만 열며 프로필·인증·원격 요청은 변경하지 않는다."""
@@ -900,7 +914,7 @@ class ProviderPanel(QWidget):
         if event.get('kind') == 'oauth_login':
             messages = {
                 'browser_requested': '로그인 대기 · 공식 로그인 화면을 준비하고 있습니다.',
-                'authorization_restart': '로그인 대기 · 새 인증 요청으로 다시 연결합니다. 새 로그인 화면에서 Recheck 연결을 승인해 주세요.',
+                'authorization_restart': '승인 확인 · 연결을 마무리하기 위한 새 인증 요청입니다. 열린 화면에서 Recheck 연결을 한 번 더 승인해 주세요.',
                 'callback_validated': '승인 확인 · 유효한 로그인 결과를 받았습니다.',
                 'token_exchange': '승인 확인 · 발급된 인증 정보를 확인하고 있습니다.',
                 'identity_verified': '승인 확인 · 계정 서명을 검증했습니다.',
@@ -908,7 +922,7 @@ class ProviderPanel(QWidget):
             }
             status = event.get('status')
             if status in messages:
-                self._connection_stage(0 if status in ('browser_requested', 'authorization_restart') else 1)
+                self._connection_stage(0 if status == 'browser_requested' else 1)
                 self._message(messages[status])
             return
         if event.get('kind') == 'key_setup':

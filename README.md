@@ -2,6 +2,8 @@
 
 **0.1.6 개발 브랜치 · Windows x64 미리보기 준비 중**
 
+분석 AI 안내는 추천 ChatGPT → Gemini 무료(API) → 공통 AI 계정 연결 순서입니다. 로그인·키 발급은 외부 브라우저가 기본이며, 체크박스로 내장 표시도 선택할 수 있습니다. [Google 제한과 기본값 결정의 근거](https://github.com/leekmny/Recheck/blob/experiment/qwebengine-login/docs/decisions/0006-external-browser-default.md)를 참고하세요.
+
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.

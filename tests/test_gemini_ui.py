@@ -57,7 +57,8 @@ def test_opening_gemini_guide_does_not_create_profiles_or_make_requests(panel):
     widget.open_gemini_setup()
     assert widget.gemini_api_key.echoMode() == QLineEdit.EchoMode.Password
     assert widget.gemini_card.isVisible() and widget.quick_button.isVisible()
-    assert widget.gemini_card.y() < widget.quick_button.parent().y()
+    assert widget.quick_button.parent().y() < widget.gemini_card.y()
+    assert widget.gemini_card.y() < widget.onboarding_combo.parent().y()
     assert not widget.gemini_free_confirm.isChecked()
     assert not widget.gemini_evidence_consent.isChecked()
     assert manager.selected_profile_id() == 'legacy-local'
@@ -212,16 +213,14 @@ def test_failed_new_gemini_key_keeps_the_previously_selected_key(panel, monkeypa
 
 
 def test_key_help_opens_only_the_official_key_creation_page(panel, monkeypatch):
-    from types import SimpleNamespace
     from PySide6.QtGui import QDesktopServices
 
     widget, manager, pending, _ = panel
     opened = []
-    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: pytest.fail('implicit external browser'))
-    monkeypatch.setattr(widget, '_get_browser', lambda: SimpleNamespace(
-        open_console=lambda provider, url, title: opened.append((provider, url)) or True))
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: opened.append(url.toString()) or True)
     widget.gemini_key_help.click()
-    assert opened == [('gemini', 'https://aistudio.google.com/apikey')]
+    assert opened == ['https://aistudio.google.com/apikey']
+    assert widget._browser_dialog is None
     assert pending == [] and manager.selected_profile_id() == 'legacy-local'
 
 

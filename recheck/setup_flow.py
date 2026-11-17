@@ -87,7 +87,7 @@ def ai_error_message(code):
         'malformed_response': '계정의 모델 목록 또는 응답을 읽지 못했습니다. 연결을 다시 확인해 주세요.',
         'model_catalog_empty': '이 계정에서 사용할 수 있는 GPT 모델이 없습니다. ChatGPT의 사용 권한과 이용 한도를 확인해 주세요.',
         'setup_inference': '로그인은 됐지만 GPT 응답을 확인하지 못했습니다. 이용 한도와 인터넷 연결을 확인한 뒤 다시 연결해 주세요.',
-        'permission': 'ChatGPT 사용 권한이 확인되지 않았습니다. 다시 연결해 Recheck 사용 승인을 확인해 주세요.',
+        'permission': '이 계정·워크스페이스의 ChatGPT 사용 권한을 확인해 주세요. 허용되지 않으면 다른 계정이나 AI 연결을 선택하세요.',
         'rate_limit': 'AI 이용 한도에 도달했습니다. ChatGPT 사용량을 확인하거나 잠시 후 다시 시도해 주세요.',
         'authentication': '저장한 계정 인증을 확인하지 못했습니다. 다시 로그인해 주세요.',
         'credential_required': '먼저 ChatGPT 계정을 연결하거나 다른 AI의 키를 저장해 주세요.',

@@ -233,6 +233,9 @@ class ProviderBrowserDialog(QDialog):
         self._original_url = ''
         self._redirect_uri = ''
         self._policy_blocked = False
+        self._provider = ''
+        self._reuse_browser = False
+        self._profile_retained = False
         self.resize(1050, 800)
         self.setWindowTitle('Recheck · 공식 연결')
         layout = QVBoxLayout(self)
@@ -262,14 +265,24 @@ class ProviderBrowserDialog(QDialog):
         self.notice.emit(text)
 
     def _begin(self, url, provider, attempt_id, redirect_uri=''):
-        if attempt_id is not None and self._active and self._attempt_id == attempt_id:
-            # A rejected code can require a fresh authorization in this same
-            # login operation. Retire its browser without cancelling its worker.
+        same_operation = attempt_id is not None and self._active and self._attempt_id == attempt_id
+        if (same_operation and provider == self._provider == 'chatgpt'
+                and self._session is not None
+                and callable(getattr(self._session, 'reset_pages', None))):
+            # Keep only this operation's ephemeral profile. Every old page guard
+            # becomes stale before reset_pages retires its pages and popups.
+            self._serial += 1
+            self._browser_layout.removeWidget(self._session.widget)
+            self._reuse_browser = True
+            self._profile_retained = False
+        elif same_operation:
+            # Legacy/injected backends may not support retaining a profile.
             self.finish_attempt(attempt_id)
         else:
             self.cancel_attempt()
         self._active = True
         self._attempt_id = attempt_id
+        self._provider = provider
         self._original_url = _url_text(url)
         self._redirect_uri = redirect_uri
         self._policy_blocked = False
@@ -278,6 +291,7 @@ class ProviderBrowserDialog(QDialog):
         self._location_changed(self._original_url)
         self.show()
         self.raise_()
+        return same_operation
 
     def open_console(self, provider, url, title):
         """Accept a valid native handoff, including a renderer-failure fallback frame."""
@@ -301,7 +315,7 @@ class ProviderBrowserDialog(QDialog):
         if not redirect_uri or attempt_id is None:
             self._say('공식 로그인 요청을 확인하지 못했습니다. 연결을 중단한 뒤 다시 시도해 주세요.')
             return False
-        self._begin(url, provider, attempt_id, redirect_uri)
+        same_operation = self._begin(url, provider, attempt_id, redirect_uri)
         if provider == 'google':
             self._policy_blocked = True
             self._say(_GOOGLE_NOTICE)
@@ -310,7 +324,15 @@ class ProviderBrowserDialog(QDialog):
             '로그인 대기 · ChatGPT 공식 안내는 시스템 브라우저입니다. '
             '내장 표시는 호환 경로이며 로그인·승인은 직접 진행해 주세요.'
         )
-        self._create_browser()
+        rendered = self._create_browser()
+        if same_operation and rendered:
+            self._say(
+                '승인 확인 · 기존 웹 로그인 상태로 새 인증 요청을 진행합니다. '
+                'Recheck 연결 승인이 필요하면 한 번 더 승인해 주세요.'
+                if self._profile_retained else
+                '승인 확인 · 새 인증 요청을 진행합니다. 임시 웹 화면을 다시 열었으므로 '
+                '로그인이 필요하면 다시 진행해 주세요.'
+            )
         return True
 
     def _create_browser(self):
@@ -324,13 +346,19 @@ class ProviderBrowserDialog(QDialog):
             return guarded
 
         try:
-            self._session = self._browser_factory(
-                self,
+            callbacks = dict(
                 allow_navigation=current(self._allow_navigation, False),
                 location_changed=current(self._location_changed),
                 load_finished=current(self._load_finished),
                 failed=current(self._display_failed),
             )
+            reuse, self._reuse_browser = self._reuse_browser, False
+            self._profile_retained = False
+            if reuse:
+                self._session.reset_pages(**callbacks)
+                self._profile_retained = True
+            else:
+                self._session = self._browser_factory(self, **callbacks)
             self._browser_layout.addWidget(self._session.widget, 1)
             if self._redirect_uri:
                 configure_login = getattr(self._session, 'hide_unsupported_google_login', None)
@@ -377,9 +405,12 @@ class ProviderBrowserDialog(QDialog):
             self.status.setText(text)
 
     def _dispose_browser(self):
+        self._reuse_browser = False
+        self._profile_retained = False
         session, self._session = self._session, None
         if session is not None:
-            self._browser_layout.removeWidget(session.widget)
+            if session.widget is not None:
+                self._browser_layout.removeWidget(session.widget)
             session.dispose()
 
     def _clear(self):
@@ -390,6 +421,7 @@ class ProviderBrowserDialog(QDialog):
         self._original_url = ''
         self._redirect_uri = ''
         self._policy_blocked = False
+        self._provider = ''
         self.external_button.setEnabled(False)
         self.location.setText('표시 중인 사이트: 없음')
         self.status.setText('연결 창을 정리했습니다.')
@@ -437,7 +469,7 @@ class ProviderBrowserDialog(QDialog):
 
 
 class _WebEngineSession:
-    """One unnamed off-record profile; its pages are destroyed before the profile."""
+    """One operation's off-record profile; fresh page sets can reuse its memory state."""
 
     def __init__(self, parent, *, allow_navigation, location_changed, load_finished, failed):
         flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
@@ -449,8 +481,7 @@ class _WebEngineSession:
         )):
             raise RuntimeError('Unsafe WebEngine environment')
 
-        from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
-        from PySide6.QtWebEngineWidgets import QWebEngineView
+        from PySide6.QtWebEngineCore import QWebEngineProfile
 
         self._disposed = False
         self._pages = []
@@ -463,6 +494,18 @@ class _WebEngineSession:
             QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies
         )
         self.profile.downloadRequested.connect(lambda request: request.cancel())
+        self.reset_pages(allow_navigation=allow_navigation, location_changed=location_changed,
+                         load_finished=load_finished, failed=failed)
+
+    def reset_pages(self, *, allow_navigation, location_changed, load_finished, failed):
+        """Destroy all old pages, retaining only this operation's memory-only profile."""
+        if self._disposed:
+            raise RuntimeError('Browser session has ended')
+        from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+
+        self._retire_pages()
+        parent = self._parent
         session = self
 
         class Page(QWebEnginePage):
@@ -540,10 +583,7 @@ class _WebEngineSession:
         if not self._disposed:
             self.widget.setUrl(QUrl(url))
 
-    def dispose(self):
-        if self._disposed:
-            return
-        self._disposed = True
+    def _retire_pages(self):
         from shiboken6 import delete
 
         for view in self._views:
@@ -560,6 +600,15 @@ class _WebEngineSession:
         self._pages.clear()
         self._views.clear()
         self._popups.clear()
+        self.widget = None
+
+    def dispose(self):
+        if self._disposed:
+            return
+        self._disposed = True
+        self._retire_pages()
+        from shiboken6 import delete
+
         # Off-record cookies and cache are memory-only and die with the profile.
         delete(self.profile)
         self.profile = None

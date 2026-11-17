@@ -9,6 +9,7 @@
 | [0003 · Windows 배포 구성](0003-windows-bundle-mode.md) | 현행 유지, `onefile` 전환 보류 | 현재 `onedir` 배포·검증·복구 경로를 유지 |
 | [0004 · 제공자별 연결 준비](0004-provider-onboarding.md) | 0005로 구체화 | GPT·Gemini·Grok·DeepSeek·Claude 공통 안내의 초기 제안 |
 | [0005 · 제품 연결 화면 통합](0005-integrated-provider-connections.md) | 구현 중, 배포 확인 대기 | 기존 인증 검증과 선택 가능한 내장 표시·공식 키 콘솔을 제품에 통합 |
+| [0006 · 외부 브라우저 기본값](0006-external-browser-default.md) | 수락, 실제 계정 검증 별도 | 외부 기본·내장 선택 유지, Google 제한의 상세 근거와 실패 관측 구분 |
 
 ## 팀에서 사용하는 방법
 
