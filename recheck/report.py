@@ -74,6 +74,11 @@ def analysis_scope_summary(run):
 
 
 def render_report(run, destination):
+    def mapping(value):
+        # Historical tool responses may record JSON null or a non-object value.
+        # Normalize only the read view; detailed JSON below retains the evidence.
+        return value if isinstance(value, dict) else {}
+
     def dump(value):
         return html.escape(json.dumps(value, ensure_ascii=False, indent=2, default=str))
 
@@ -166,7 +171,7 @@ def render_report(run, destination):
                       + esc(status_label(run.get('status'))) + ' · 추가 요청 상태: '
                       + esc(status_label(operation.get('status'))) + '</p><p>원인 코드: '
                       + esc(operation.get('error_code', '없음')) + '</p></section>')
-    environment = run.get('environment', {})
+    environment = mapping(run.get('environment'))
     structure = run.get('structure') or {}
     if structure.get('analysis_kind') == 'managed':
         pieces.append('<section><h2>.NET 메서드 본문 차이</h2>'
@@ -181,11 +186,20 @@ def render_report(run, destination):
         if not structure.get('managed_differences'):
             pieces.append('<p>대응 가능한 메서드에서 관측된 본문 차이가 없습니다. 미관측·미대응 항목은 상세 근거를 확인하세요.</p>')
         pieces.append('</section>')
-    ghidra = environment.get('ghidra', {})
-    java = ghidra.get('java', {})
-    docker = environment.get('docker', {})
-    docker_version = docker.get('version', {})
-    docker_server = docker_version.get('Server', {}) if isinstance(docker_version, dict) else {}
+    ghidra = mapping(environment.get('ghidra'))
+    java = mapping(ghidra.get('java'))
+    docker = mapping(environment.get('docker'))
+    docker_version = mapping(docker.get('version'))
+    docker_server = mapping(docker_version.get('Server'))
+    docker_observation = '버전 미기록'
+    if docker.get('status') in ('failed', 'partial', 'cancelled', 'blocked'):
+        docker_observation = status_label(docker['status'])
+    elif 'Server' in docker_version:
+        docker_observation = (
+            '서버 응답 없음 (null)' if docker_version['Server'] is None
+            else '버전 기록됨' if docker_server.get('Version')
+            else '불완전한 서버 응답'
+        )
     llm = run.get('llm', {})
     execution = llm.get('execution') or {}
     settings = run.get('settings', {})
@@ -200,13 +214,14 @@ def render_report(run, destination):
         ('Ghidra', ghidra.get('version')),
         ('Java', java.get('stderr') or java.get('stdout')),
         ('Docker Engine', docker_server.get('Version')),
+        ('Docker 관측 상태', docker_observation),
         ('Docker 컨텍스트', docker.get('context_name', docker.get('context'))),
         ('실행 이미지 ID', run.get('image', {}).get('image_id')),
         ('AI 제공자', provider),
         ('AI 역할', llm.get('role', 'analysis')),
         ('AI 연결 ID', llm.get('profile_id')),
         ('인증 방식', llm.get('auth_mode', 'none' if provider == 'ollama' else None)),
-        ('Ollama', llm.get('server_info', environment.get('ollama', {})).get('version')),
+        ('Ollama', mapping(llm.get('server_info', environment.get('ollama'))).get('version')),
         ('선택 모델', llm.get('model', settings.get('model'))),
         ('모델 다이제스트', execution.get('digest')),
         (

@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from recheck.adapters import DockerAdapter, GhidraAdapter, validate_static
 from recheck.comparison import compare_behavior
 from recheck.engine import Engine
+from recheck.managed_execution import ManagedExecutionAdapter
 from recheck.models import (
     Settings,
     atomic_json,
@@ -410,6 +411,17 @@ def behavior_decisions(behavior):
 
 def check_outputs(rows, truth):
     errors = []
+    observed_ids = [row.get('test_id') for row in rows]
+    oracle_ids = [row.get('test_id') for row in truth]
+    if (
+        not all(isinstance(tid, str) and tid for tid in (*observed_ids, *oracle_ids))
+        or len(set(observed_ids)) != len(observed_ids)
+        or len(set(oracle_ids)) != len(oracle_ids)
+        or set(observed_ids) != set(oracle_ids)
+    ):
+        return dict(status='FAILED', errors=[dict(
+            field='test_id', reason='Each unique oracle input requires exactly one observation'
+        )])
     truth_by_id = {x['test_id']: x for x in truth}
     for row in rows:
         for target in TARGETS:
@@ -641,7 +653,7 @@ async def run(args):
             json.dumps(dict(output=str(output), status='PREPARED'), ensure_ascii=False), flush=True
         )
         return
-    docker = DockerAdapter(context=settings.docker_context)
+    docker = ManagedExecutionAdapter(settings)
     image = await docker.prepare_image('linux', cancel=cancel)
     atomic_json(output / 'runtime-image.json', image)
     if image.get('status') != 'success':

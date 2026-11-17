@@ -1,4 +1,6 @@
 .venv/
+.venv-build/
+.ruff_cache/
 __pycache__/
 .pytest_cache/
 build/
@@ -23,6 +25,8 @@ build/
 
 # Share reviewed guides; machine-specific diagnostics and historical QA stay local.
 /docs/*
+!/docs/PROJECT_AUDIT_REPORT.md
+!/docs/superpowers/
 !/docs/REVIEW_AND_RECHECK.md
 !/docs/ANALYSIS_MODES.md
 !/docs/GEMINI_FREE_SETUP.md

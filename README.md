@@ -1,12 +1,12 @@
 # Recheck
 
-**0.1.4 · Windows x64 초기 개발 버전**
+**0.1.5 · Windows x64 초기 개발 버전**
 
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.
 
-**[0.1.4 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v0.1.4/Recheck-0.1.4-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v0.1.4)
+**[0.1.5 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v0.1.5/Recheck-0.1.5-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)
 
 `0.1.x`는 초기 개발 버전입니다. [이전 이름 대응표](docs/PUBLIC_HISTORY.md#공개-버전-이름-정리)에 공개 버전의 변경을 기록합니다. 소스 검사와 각 Windows 배포본의 실행 검증 범위는 해당 릴리스에서 구분해 확인하세요.
 

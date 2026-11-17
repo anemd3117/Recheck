@@ -1904,12 +1904,18 @@ class MainWindow(QMainWindow):
         )
 
     def environment_done(self, result):
+        def mapping(value):
+            return value if isinstance(value, dict) else {}
+
         self.environment_view.setPlainText(dump(result))
         ollama = result.get("ollama", result) if isinstance(result, dict) else {}
-        if not isinstance(ollama, dict):
-            ollama = {}
+        ollama = mapping(ollama)
         if isinstance(result, dict) and "ollama" in result:
             self.last_environment.update(result)
+            # Keep the raw response above; readiness consumes an optional-map
+            # read view so an unavailable tool cannot abort the whole callback.
+            for tool in ('ollama', 'docker', 'ghidra'):
+                self.last_environment[tool] = mapping(self.last_environment.get(tool))
             self._analysis_environment = self.last_environment.copy()
         else:
             self.last_environment["ollama"] = ollama
@@ -1928,14 +1934,10 @@ class MainWindow(QMainWindow):
             status.append("원인: " + short(ollama["error"], 90))
         self.connection_status.setText("\n".join(status))
         self.connection_status.setToolTip("<pre>" + html.escape(dump(ollama)) + "</pre>")
-        docker = self.last_environment.get("docker", {})
-        ghidra = self.last_environment.get("ghidra", {})
-        server = (
-            docker.get("version", {}).get("Server", {})
-            if isinstance(docker.get("version"), dict)
-            else {}
-        )
-        java = ghidra.get("java", {})
+        docker = mapping(self.last_environment.get("docker"))
+        ghidra = mapping(self.last_environment.get("ghidra"))
+        server = mapping(mapping(docker.get("version")).get("Server"))
+        java = mapping(ghidra.get("java"))
         java_version = (
             short(java.get("stderr", java.get("stdout", "")), 90)
             .split("OpenJDK Runtime", 1)[0]
@@ -2645,6 +2647,10 @@ class MainWindow(QMainWindow):
     def show_result(self, result):
         self.result_empty.hide()
         self.result_content.show()
+        if result.get('run_id') != self.run_result.get('run_id'):
+            self.evidence_details.clear()
+            self.evidence_id.clear()
+            self.answer_view.clear()
         self.run_result = result
         from .review_views import verified_behavior
         displayed_behavior = verified_behavior(result)
@@ -2980,10 +2986,14 @@ class MainWindow(QMainWindow):
         rid = self.selected_run_id()
         question = self.question_text.text().strip()
         if rid and question:
+            def answered(answer):
+                if self.run_result.get('run_id') == rid:
+                    self.answer_view.setPlainText(dump(answer))
+
             self.launch_task(
                 "근거에 기반한 답변",
                 lambda s, c, e: self.engine_for(s, e).question(rid, question, cancel=c),
-                lambda answer: self.answer_view.setPlainText(dump(answer)),
+                answered,
             )
 
     def run_analysis_command(self):

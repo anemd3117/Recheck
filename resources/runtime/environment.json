@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "release": "managed-20261115",
+  "release": "source-0.1.5",
   "versions": {
     "ubuntu": "24.04",
     "libc6": "2.39-0ubuntu8.9",
     "libstdc++6": "14.2.0-4ubuntu2~24.04.1",
     "ollama": "0.40.16",
-    "rea": "6.7.0",
+    "rea": "6.9.0",
     "ghidra": "12.1.4",
     "java": "21.0.9+10",
     "node": "24.22.1",
@@ -15,21 +15,15 @@
   "images": {
     "static": {
       "ref": "recheck-managed-static:1",
-      "image_id": "sha256:98f63c4c428325170e44398f5247a9c6018376182155623928de91d6463e43c7",
+      "image_id": null,
       "platform": "linux/amd64",
       "trusted_distribution": false,
-      "size_bytes": 2634706460,
       "worker_contract": "rea-static-1.0",
       "licenses": {
         "rea": "MIT",
         "ghidra": "Apache-2.0 and bundled notices",
         "java": "GPL-2.0-with-classpath-exception",
         "node": "MIT"
-      },
-      "archive": {
-        "filename": "recheck-managed-static-1.tar",
-        "sha256": "25f477976160e0ef55b9367ef0c298aa27f25146db4f2b49f3811d4c2e0856c0",
-        "size_bytes": 899629568
       }
     },
     "execution": {

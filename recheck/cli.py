@@ -234,6 +234,9 @@ def public_result(result):
     if code in SETUP_DIAGNOSTICS:
         summary['message'], actions = SETUP_DIAGNOSTICS[code]
         summary['next_actions'] = list(actions)
+    if code == 'analysis_preflight_blocked':
+        summary['message'] = '분석 시작 조건을 확인하세요. 분석 기록은 생성하지 않았습니다.'
+        summary['next_actions'] = list(result.get('next_actions', []))
     for key in ('run_id', 'workflow_id', 'report', 'comparison_report', 'directory'):
         if isinstance(result.get(key), str):
             if key not in ('report', 'comparison_report') or Path(result[key]).is_file():
@@ -501,6 +504,10 @@ def _execute(args, cancel):
     elif command == 'history':
         result = engine.store.list_runs()
     elif command == 'regression-run':
+        preflight = asyncio.run(engine.analysis_preflight(
+            args.original, args.reimplementation, analysis_mode='dynamic', cancel=cancel))
+        if preflight['status'] != 'ready':
+            return preflight
         run = asyncio.run(engine.recheck_regression(args.suite_id, args.original, args.reimplementation, cancel))
         result = regression_result_summary(run)
     elif command == 'analyze':
@@ -514,6 +521,10 @@ def _execute(args, cancel):
                 id='baseline', description='입력 없는 기본 실행', args=[], stdin='', source='user',
             )]
         )
+        preflight = asyncio.run(engine.analysis_preflight(
+            args.original, args.reimplementation, analysis_mode=scope, cancel=cancel))
+        if preflight['status'] != 'ready':
+            return preflight
         result = asyncio.run(
             engine.analyze(args.original, args.reimplementation, tests, args.mode, cancel,
                            analysis_mode=args.analysis_mode, ai_mode=args.ai_mode)

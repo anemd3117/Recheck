@@ -10,6 +10,7 @@ from scripts.run_benchmark import (
     static_context,
 )
 import base64
+import pytest
 
 
 def test_blind_context_removes_hidden_answers():
@@ -96,3 +97,23 @@ def test_unmeasured_observations_remain_inconclusive():
     assert behavior_decisions(dict(tests=[dict(test_id='a', match=None)])) == [
         dict(test_id='a', decision='inconclusive')
     ]
+
+
+@pytest.mark.parametrize('observed_ids,oracle_ids', [
+    (['a', 'a'], ['a', 'b']),
+    (['a', 'unknown'], ['a', 'b']),
+    (['a', 'b'], ['a', 'a']),
+    (['a', 'a'], ['a', 'a']),
+])
+def test_ground_truth_requires_exact_unique_input_identities(observed_ids, oracle_ids):
+    observation = dict(stdout_b64='b2sK', stderr_b64='', exit_code=0)
+    expected = dict(stdout='ok\n', stderr='', exit_code=0)
+    rows = [dict(test_id=tid, original=observation, reimplementation=observation)
+            for tid in observed_ids]
+    truth = [dict(test_id=tid, original=expected, reimplementation=expected)
+             for tid in oracle_ids]
+
+    result = check_outputs(rows, truth)
+
+    assert result['status'] == 'FAILED'
+    assert result['errors']

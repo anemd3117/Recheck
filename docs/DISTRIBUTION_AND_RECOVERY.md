@@ -5,7 +5,7 @@
 사용자는 [처음 실행](FIRST_RUN.md), 개발자는 아래의 새 배포본 검증·교체 절차를 따릅니다.
 [공개 범위](PUBLICATION_SCOPE.md)와 [공개 이력 구성](PUBLIC_HISTORY.md)을 함께 따르세요.
 
-이 소스 버전은 **0.1.4**입니다. 실행 파일 경로는 [해당 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.4)의 `Recheck-0.1.4-Windows-x64.zip`이며 소스 검사와 해당 배포본의 실행 검증 범위를 구분해 확인하세요. 새 설치는 Gemini 3.5 Flash-Lite 무료 연결을 안내하며, 자신의 키 저장과 실제 응답 검증 전에는 연결되지 않습니다. 기존 AI 설정은 보존하고 GPT는 추천 선택으로 제공합니다. [Gemini 설정](GEMINI_FREE_SETUP.md)을 참고하세요.
+이 소스 버전은 **0.1.5**입니다. 실행 파일 경로는 [해당 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)의 `Recheck-0.1.5-Windows-x64.zip`이며 소스 검사와 해당 배포본의 실행 검증 범위를 구분해 확인하세요. 새 설치는 Gemini 3.5 Flash-Lite 무료 연결을 안내하며, 자신의 키 저장과 실제 응답 검증 전에는 연결되지 않습니다. 기존 AI 설정은 보존하고 GPT는 추천 선택으로 제공합니다. [Gemini 설정](GEMINI_FREE_SETUP.md)을 참고하세요.
 
 ## 실행 위치
 

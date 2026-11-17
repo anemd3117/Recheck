@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "recheck"
-version = "0.1.4"
+version = "0.1.5"
 description = "Local binary reconstruction fidelity analyzer"
 requires-python = ">=3.11"
 dependencies = ["PySide6-Essentials>=6.8", "pydantic>=2.10", "httpx>=0.28", "psutil>=6", "PyJWT[crypto]>=2.15.1", "jsonschema>=4.26"]
@@ -27,3 +27,12 @@ testpaths = ["tests"]
 line-length = 100
 target-version = ['py311']
 skip-string-normalization = true
+
+[tool.ruff]
+target-version = 'py311'
+line-length = 100
+extend-exclude = ['verification', 'build', 'dist', '.venv-build']
+
+[tool.ruff.lint]
+# Start with correctness checks; the audit records the wider style backlog.
+select = ['E9', 'F63', 'F7', 'F82', 'B006', 'B008']

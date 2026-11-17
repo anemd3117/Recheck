@@ -2,8 +2,8 @@
 
 ZIP-based suffixes such as APK/JAR/MSIX/IPA are hints, not evidence of a valid
 application package. Only member paths, kinds, lengths and uncompressed SHA-256
-are compared. Compression, timestamps, permissions and signatures are not
-validated or interpreted. Nested archives remain ordinary byte content.
+are compared. ZIP compression integrity is validated; timestamps, permissions
+and application signatures are not compared. Nested archives remain byte content.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ def _preflight(stream, limits, cancel):
         if stream.read(4) == b'PK\x06\x07':
             raise PackageError('package_zip64')
     directory_start = end_offset - directory_size
-    if directory_start < 0:
+    if directory_start < 0 or directory_offset != directory_start:
         raise PackageError('package_invalid')
     stream.seek(directory_start)
     remaining, observed_count = directory_size, 0
@@ -120,7 +120,7 @@ def _preflight(stream, limits, cancel):
     if observed_count != count:
         raise PackageError('package_invalid')
     stream.seek(0)
-    return initial, count
+    return initial, count, directory_start
 
 
 def _member_path(info, limits):
@@ -162,6 +162,8 @@ def _checked_members(entries, limits, cancel):
             raise PackageError('package_duplicate_path')
         seen.add(path)
         kind = _member_kind(info)
+        if info.volume:
+            raise PackageError('package_multidisk')
         if info.flag_bits & (1 | 64):
             raise PackageError('package_encrypted')
         if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
@@ -185,6 +187,126 @@ def _checked_members(entries, limits, cancel):
     return checked
 
 
+def _check_extra(extra):
+    """Reject truncated fields and ZIP64 even when its declared sizes are small."""
+    offset = 0
+    while offset < len(extra):
+        if len(extra) - offset < 4:
+            raise PackageError('package_invalid')
+        kind, length = struct.unpack_from('<HH', extra, offset)
+        offset += 4
+        if length > len(extra) - offset:
+            raise PackageError('package_invalid')
+        if kind == 1:
+            raise PackageError('package_zip64')
+        offset += length
+
+
+def _member_boundaries(entries, directory_start):
+    """Physical member extents prevent overlaps, hidden gaps and trailing data."""
+    offsets = sorted(info.header_offset for info in entries)
+    if (len(set(offsets)) != len(offsets)
+            or (offsets[0] if offsets else directory_start) != 0
+            or any(offset < 0 or offset >= directory_start for offset in offsets)):
+        raise PackageError('package_invalid')
+    return dict(zip(offsets, offsets[1:] + [directory_start]))
+
+
+def _member_layout(source, info, boundary):
+    """Validate local/central/descriptor metadata before trusting member output."""
+    _check_extra(info.extra)
+    if info.header_offset + 30 > boundary:
+        raise PackageError('package_invalid')
+    source.seek(info.header_offset)
+    header = source.read(30)
+    if len(header) != 30 or header[:4] != b'PK\x03\x04':
+        raise PackageError('package_invalid')
+    _, version, flags, method, _, _, crc, compressed, size, names, extras = struct.unpack(
+        '<4s5H3I2H', header)
+    # Only deflate options, a data descriptor and UTF-8 names are supported.
+    allowed_flags = 0x808 | (6 if method == zipfile.ZIP_DEFLATED else 0)
+    if (version != (info.extract_version | (info.reserved << 8))
+            or flags != info.flag_bits or flags & ~allowed_flags
+            or method != info.compress_type):
+        raise PackageError('package_invalid')
+    data_start = info.header_offset + 30 + names + extras
+    if data_start > boundary:
+        raise PackageError('package_invalid')
+    name = source.read(names).decode('utf-8' if flags & 0x800 else 'cp437')
+    if name != info.orig_filename:
+        raise PackageError('package_invalid')
+    _check_extra(source.read(extras))
+    if compressed == 0xffffffff or size == 0xffffffff:
+        raise PackageError('package_zip64')
+    expected = (info.CRC, info.compress_size, info.file_size)
+    local = (crc, compressed, size)
+    if method == zipfile.ZIP_STORED and info.compress_size != info.file_size:
+        raise PackageError('package_invalid')
+    data_end = data_start + info.compress_size
+    if data_end > boundary:
+        raise PackageError('package_invalid')
+    if flags & 8:
+        if any(value not in (0, actual) for value, actual in zip(local, expected)):
+            raise PackageError('package_invalid')
+        descriptor_size = boundary - data_end
+        if descriptor_size not in (12, 16):
+            raise PackageError('package_invalid')
+        source.seek(data_end)
+        descriptor = source.read(descriptor_size)
+        if descriptor_size == 16:
+            if descriptor[:4] != b'PK\x07\x08':
+                raise PackageError('package_invalid')
+            descriptor = descriptor[4:]
+        if len(descriptor) != 12 or struct.unpack('<3I', descriptor) != expected:
+            raise PackageError('package_invalid')
+    elif local != expected or data_end != boundary:
+        raise PackageError('package_invalid')
+    return data_start
+
+
+def _verify_member_stream(source, info, start, limits, prior_bytes, cancel):
+    """Decode raw compressed bytes independently of ZipExtFile's declared cap.
+
+    Every decompression call caps its output. A forged size cannot hide payload
+    bytes, an unfinished stream, a second stream or bytes after DEFLATE EOF.
+    """
+    source.seek(start)
+    remaining, observed, crc = info.compress_size, 0, 0
+    digest = hashlib.sha256()
+    decoder = (zlib.decompressobj(-zlib.MAX_WBITS)
+               if info.compress_type == zipfile.ZIP_DEFLATED else None)
+    while remaining:
+        _check_cancel(cancel)
+        chunk = source.read(min(remaining, CHUNK_BYTES))
+        if not chunk:
+            raise PackageError('package_invalid')
+        remaining -= len(chunk)
+        pending = chunk
+        while True:
+            _check_cancel(cancel)
+            output = decoder.decompress(pending, CHUNK_BYTES) if decoder else pending
+            pending = decoder.unconsumed_tail if decoder else b''
+            observed += len(output)
+            if observed > limits.max_member_bytes:
+                raise PackageError('package_member_size')
+            if prior_bytes + observed > limits.max_total_bytes:
+                raise PackageError('package_total_size')
+            if observed > info.file_size:
+                raise PackageError('package_invalid')
+            digest.update(output)
+            crc = zlib.crc32(output, crc)
+            if decoder and (decoder.unused_data or decoder.eof and (pending or remaining)):
+                raise PackageError('package_invalid')
+            # max_length can leave output buffered after all input was consumed.
+            # Drain with empty input under the same byte/cancellation limits.
+            if decoder is None or decoder.eof or not (pending or output):
+                break
+    if (decoder is not None and not decoder.eof
+            or observed != info.file_size or crc != info.CRC):
+        raise PackageError('package_invalid')
+    return digest.hexdigest()
+
+
 def inventory_package(path, *, limits=None, cancel=None):
     """Read an entire bounded inventory, retaining measured rows on read failure.
 
@@ -196,7 +318,7 @@ def inventory_package(path, *, limits=None, cancel=None):
     try:
         _check_cancel(cancel)
         with filesystem_path(path).open('rb') as source:
-            initial, count = _preflight(source, limits, cancel)
+            initial, count, directory_start = _preflight(source, limits, cancel)
             report['declared_members'] = count
             _check_cancel(cancel)
             with zipfile.ZipFile(source, 'r') as package:
@@ -204,8 +326,12 @@ def inventory_package(path, *, limits=None, cancel=None):
                 if len(entries) != count:
                     raise PackageError('package_invalid')
                 checked = _checked_members(entries, limits, cancel)
+                boundaries = _member_boundaries(entries, directory_start)
                 for info, member_path, kind in checked:
                     _check_cancel(cancel)
+                    start = _member_layout(source, info, boundaries[info.header_offset])
+                    raw_digest = _verify_member_stream(
+                        source, info, start, limits, report['total_bytes_read'], cancel)
                     digest, observed = hashlib.sha256(), 0
                     # Opening directory entries also checks malformed headers/CRC.
                     with package.open(info, 'r') as member:
@@ -221,7 +347,7 @@ def inventory_package(path, *, limits=None, cancel=None):
                             if report['total_bytes_read'] > limits.max_total_bytes:
                                 raise PackageError('package_total_size')
                             digest.update(chunk)
-                    if observed != info.file_size:
+                    if observed != info.file_size or digest.hexdigest() != raw_digest:
                         raise PackageError('package_invalid')
                     report['members'].append(dict(path=member_path, kind=kind, size=observed,
                                                   sha256=digest.hexdigest()))

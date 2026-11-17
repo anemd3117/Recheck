@@ -11,7 +11,7 @@ requirements have been met.
 | CPython | Build/runtime version recorded with each artifact | [Python license and history](https://docs.python.org/3/license.html) |
 | PySide6 Essentials / Shiboken6 / Qt | Current source lock: 6.12.0 | [Qt for Python licenses](https://doc.qt.io/qtforpython-6/licenses.html), [Qt licensing](https://doc.qt.io/qt-6/licensing.html) |
 | PyInstaller | Current source lock: 6.22.3 | [License and bootloader exception](https://pyinstaller.org/en/stable/license.html) |
-| REA | Managed image manifest: 6.7.0 | [Upstream repository](https://github.com/morluto/rea) |
+| REA | Managed source manifest: 6.9.0 | [Upstream repository](https://github.com/morluto/rea) |
 | Ghidra | Managed image manifest: 12.1.4 | [Upstream license and bundled components](https://github.com/NationalSecurityAgency/ghidra/blob/master/LICENSE) |
 | Eclipse Temurin / OpenJDK | Manifest Java 21.0.9+10 | [Adoptium legal materials](https://adoptium.net/about/legal/) |
 | Node.js | Managed image manifest: 24.22.1 | [Upstream licenses](https://github.com/nodejs/node/blob/main/LICENSE) |

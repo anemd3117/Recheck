@@ -1,1 +1,1 @@
-﻿{"private":true,"type":"module","name":"recheck-static-worker","version":"1.0.0","dependencies":{"rea-agents":"6.7.0","@modelcontextprotocol/sdk":"1.32.2"}}
+{"private":true,"type":"module","name":"recheck-static-worker","version":"1.0.0","dependencies":{"@modelcontextprotocol/sdk":"1.32.2","rea-agents":"6.9.0"}}

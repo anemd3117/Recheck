@@ -32,7 +32,9 @@ def verification_inputs(root):
     """Keep check sources separate from the application's runtime identity."""
     paths = [root / name for name in (
         'conftest.py', 'pytest.ini', '.pytest.ini', 'pytest.toml', '.pytest.toml',
-        'setup.cfg', 'tox.ini', '.github/workflows/tests.yml')]
+        'setup.cfg', 'tox.ini', 'requirements-quality.txt')]
+    paths += [p for p in (root / '.github/workflows').rglob('*')
+              if p.is_file() and p.suffix in ('.yml', '.yaml')]
     paths += [p for p in (root / 'tests').rglob('*') if p.is_file()
               and '__pycache__' not in p.parts and p.suffix != '.pyc']
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

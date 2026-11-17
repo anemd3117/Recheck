@@ -17,7 +17,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from recheck.comparison import compare_behavior
-from recheck.models import Settings, atomic_json
+from recheck.models import Settings, atomic_json, inspect_binary
 from recheck.managed_execution import ManagedExecutionAdapter
 SOURCES = ROOT / 'samples' / 'accuracy'
 VARIANTS = {'base': ['-O0'], 'optimized': ['-O2'], 'alternate': ['-O0', '-DALTERNATE=1'],
@@ -93,14 +93,23 @@ def build(out, compiler_image):
     image = json.loads(command(['docker', 'image', 'inspect', compiler_image], receipts))[0]
     image_id = image['Id']
     command(['docker', 'run', '--rm', '--network=none', '--entrypoint', 'gcc', image_id, '--version'], receipts)
-    pe_compiler = shutil.which('x86_64-w64-mingw32-gcc')
-    if pe_compiler:
-        command([pe_compiler, '--version'], receipts)
+    pe_compilers = {
+        'c': shutil.which('x86_64-w64-mingw32-gcc'),
+        'cpp': shutil.which('x86_64-w64-mingw32-g++'),
+    }
+    pe_compilation = {
+        language: dict(status='available' if compiler else 'unavailable', compiler=compiler)
+        for language, compiler in pe_compilers.items()
+    }
+    for pe_compiler in dict.fromkeys(pe_compilers.values()):
+        if pe_compiler:
+            command([pe_compiler, '--version'], receipts)
     elf, pe = out / 'elf', out / 'pe'
     elf.mkdir(exist_ok=True); pe.mkdir(exist_ok=True)
     for source in sorted([*SOURCES.glob('*.c'), *SOURCES.glob('*.cpp')]):
         cpp = source.suffix == '.cpp'
         compiler = 'g++' if cpp else 'gcc'
+        pe_compiler = pe_compilers['cpp' if cpp else 'c']
         standard = '-std=c++17' if cpp else '-std=c11'
         variants = ({'base': ['-O0'], 'stripped': ['-O0', '-s']} if cpp else
                     VARIANTS if source.stem != 'recovery' else {'base': ['-O0']})
@@ -116,13 +125,19 @@ def build(out, compiler_image):
                 command(argv, receipts)
                 binaries[(source.stem, variant)] = target
                 if pe_compiler:
-                    command([shutil.which('g++') if cpp else pe_compiler, standard,
+                    pe_target = pe / (target.name + '.exe')
+                    command([pe_compiler, standard,
                              '-Wall', '-Wextra', '-Werror', *flags,
                              str(source.relative_to(ROOT)), '-o',
-                             str((pe / (target.name + '.exe')).relative_to(ROOT))], receipts)
+                             str(pe_target.relative_to(ROOT))], receipts)
+                    metadata = inspect_binary(pe_target)
+                    if (metadata['format'] != 'PE' or metadata['architecture'] != 'x86-64'
+                            or metadata.get('kind') != 'console'):
+                        raise ValueError('Compiler did not produce a native PE x64 console artifact')
             finally:
                 atomic_json(out / 'build-receipt.json', dict(compiler_image_id=image_id,
-                    commands=receipts, pe_execution='not attempted: isolated Windows backend required'))
+                    commands=receipts, pe_compilation=pe_compilation,
+                    pe_execution='not attempted: isolated Windows backend required'))
     atomic_json(out / 'binary-identities.json', [dict(path=str(p.relative_to(out)),
         sha256=digest(p), bytes=p.stat().st_size) for p in [*elf.iterdir(), *pe.iterdir()]])
     return binaries

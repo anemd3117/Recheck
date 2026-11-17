@@ -6,12 +6,15 @@ Keep the Windows application and existing GPT sign-in workflow. The public Windo
 ZIP contains the executable, Python/Qt runtime and reviewed Docker source contexts.
 It does not redistribute the old private Docker archives. Users do not need host
 Git, Python, Java, Ghidra, REA or MCP to launch the executable and prepare the managed
-environment. Docker Desktop and its Linux amd64 engine are still needed for analysis.
+environment. Docker Desktop and its Linux amd64 engine are needed for managed
+static analysis and Linux execution comparison. Direct static analysis instead
+uses an installed Ghidra and compatible JDK.
 Rebuild and folder comparison are outside this change.
 
-The normal sequence is **connect AI → prepare environment → choose two programs
-→ compare → inspect evidence**. GPT remains the default. Ollama is optional and
-starts only when the user selects local AI.
+Choose an analysis scope, check its required tools, prepare any missing environment,
+then compare two programs and inspect the evidence. AI is optional and independent
+of the analysis scope. New installations offer Gemini free setup first and GPT as
+the recommended alternative. Ollama starts only when the user selects local AI.
 
 ## Ownership and boundaries
 
@@ -64,10 +67,19 @@ build metadata change even when source contexts match. Their locally inspected I
 and context hashes are recorded instead of presenting them as the old published
 image IDs. Images, receipts and optional model data remain separate from credentials.
 
-Static and execution images are required. Ollama is not required for GPT. The
+Managed static analysis requires the static image; dynamic analysis requires the
+execution image; both requires both images. Neither AI nor Ollama is required
+when AI explanations are off. Ollama is not required for external AI. The
 manager probes without making changes; preparation and service start are explicit
 application operations. It only removes its own temporary containers and preserves
 model data. Existing local Ollama installations retain their endpoint.
+
+CLI and GUI check file support and the selected scope's tools before registering
+an analysis. A rejected start has no analysis run. A tool or runtime failure after
+analysis starts retains its failed run and evidence for diagnosis and retry.
+Selecting direct Ghidra for static analysis does not change the packaged execution
+adapter. Legacy execution images are inspected without building during readiness
+checks; missing or stale images block analysis until explicit preparation.
 
 ## Static analysis contract
 

@@ -38,6 +38,8 @@ def client(module, routes=None, **options):
         ('GET', REPO + '/git/ref/tags/' + TAG): None,
         ('GET', REPO + '/branches/' + BRANCH.replace('/', '%2F')): {'commit': {'sha': SHA}},
         ('GET', REPO + '/actions/runs'): {'workflow_runs': [dict(id=1, workflow_id=10, name='Unit tests', event='push',
+            head_sha=SHA, head_branch=BRANCH, status='completed', conclusion='success'),
+            dict(id=2, workflow_id=20, name='Security analysis', event='push',
             head_sha=SHA, head_branch=BRANCH, status='completed', conclusion='success')]}}
     defaults.update(routes or {})
     c.opener = MemoryHTTP(defaults)
@@ -108,6 +110,21 @@ def test_stale_head_cannot_create_pr(module):
     c = client(module, execute=True)
     with pytest.raises(module.SafeError, match='reviewed commit'): c.draft_pr('b' * 40, 'Title', 'Body')
     assert c.opener.writes == []
+
+
+@pytest.mark.parametrize('security_state', ['missing', 'in_progress', 'failure', 'success'])
+def test_release_gate_requires_security_workflow_for_the_reviewed_head(module, security_state):
+    runs = [dict(id=1, workflow_id=10, name='Unit tests', event='push',
+                 head_sha=SHA, head_branch=BRANCH, status='completed', conclusion='success')]
+    if security_state != 'missing':
+        runs.append(dict(id=2, workflow_id=20, name='Security analysis', event='push',
+                         head_sha=SHA, head_branch=BRANCH,
+                         status='in_progress' if security_state == 'in_progress' else 'completed',
+                         conclusion='failure' if security_state == 'failure' else 'success'))
+    c = client(module, {('GET', REPO + '/actions/runs'): {'workflow_runs': runs}})
+    result = c.ci(SHA)
+    assert result['complete'] is (security_state in ('failure', 'success'))
+    assert result['success'] is (security_state == 'success')
 
 @pytest.mark.parametrize('state', ['missing', 'failure', 'in_progress', 'wrong_workflow'])
 def test_ready_requires_exact_green_unit_tests(module, state):

@@ -28,6 +28,9 @@ def test_tests_changing_runtime_source_cannot_receive_verified_identity(tmp_path
     ('tests/test_added.py', 'add'),
     ('tests/test_example.py', 'delete'),
     ('.github/workflows/tests.yml', 'modify'),
+    ('.github/workflows/security.yml', 'modify'),
+    ('.github/workflows/new-check.yml', 'add'),
+    ('requirements-quality.txt', 'modify'),
     ('conftest.py', 'modify'),
     ('pytest.ini', 'modify'),
     ('pytest.toml', 'modify'),
@@ -88,7 +91,7 @@ def test_success_records_checks_separately_from_runtime_identity(tmp_path):
     assert verification['commands'][1]['argv'][0:2] == ['node', '--test']
     assert verification['environment']['QT_QPA_PLATFORM'] == 'offscreen'
     assert verification['environment']['RECHECK_DATA_DIR'] == str(tmp_path / 'records/test-data')
-    assert json.loads((tmp_path / 'records/verified-source.json').read_text()) == result
+    assert json.loads((tmp_path / 'records/verified-source.json').read_text(encoding='utf-8')) == result
 
 
 def test_failed_verification_preserves_existing_source_identity(tmp_path):

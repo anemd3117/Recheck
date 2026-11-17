@@ -51,6 +51,11 @@ def _ok(result):
     )
 
 
+def _java_major(text):
+    match = re.search(r'(?:version\s+"|(?:openjdk|java)\s+)(?:1\.)?(\d+)', text)
+    return int(match.group(1)) if match else None
+
+
 async def _emit(callback, message, **values):
     if callback:
         result = callback(dict(kind='prerequisites', message=message, **values))
@@ -119,12 +124,14 @@ def _candidate_paths(tool_id):
         values += [pf / 'Docker/Docker/resources/bin/docker.exe',
                    local / 'Programs/DockerDesktop/resources/bin/docker.exe']
     elif tool_id == 'java':
-        if os.environ.get('JAVA_HOME'):
-            values.append(Path(os.environ['JAVA_HOME']) / 'bin/java.exe')
+        values = [Path(os.environ[variable]) / ('bin/java.exe' if os.name == 'nt' else 'bin/java')
+                  for variable in ('JAVA_HOME_OVERRIDE', 'JAVA_HOME') if os.environ.get(variable)] + values
         for base in (pf / 'Eclipse Adoptium', pf / 'Java', pf / 'Microsoft'):
             values.extend(sorted(base.glob('jdk*/bin/java.exe'), reverse=True))
     elif tool_id == 'ollama':
-        values += [local / 'Programs/Ollama/ollama.exe', pf / 'Ollama/ollama.exe']
+        from .ollama import discover_ollama
+
+        values += discover_ollama().get('candidates', [])
     elif tool_id == 'ghidra':
         for name in ('GHIDRA_HOME', 'GHIDRA_INSTALL_DIR'):
             if os.environ.get(name):
@@ -201,8 +208,8 @@ async def _probe(tool_id, *, cancel=None):
             except (KeyError, TypeError, ValueError):
                 continue
         elif tool_id == 'java':
-            match = re.search(r'(?:openjdk|java) (?:version )?"?(\d+)', text)
-            if not match or int(match.group(1)) < 21 or not path.with_name('javac.exe' if os.name == 'nt' else 'javac').is_file():
+            major = _java_major(text)
+            if major is None or major < 21 or not path.with_name('javac.exe' if os.name == 'nt' else 'javac').is_file():
                 continue
             executable, version_text = str(path), text.splitlines()[0][:160]
         else:
