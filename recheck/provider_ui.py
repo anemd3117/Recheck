@@ -449,12 +449,34 @@ class ProviderPanel(QWidget):
             checkbox.toggled.connect(self._invalidate)
 
     def _build_connection_card(self, outer):
+        from .models import resources_root
         from .provider_onboarding import CONNECTION_PRESETS
 
         card = QGroupBox('AI 계정 연결')
         box = QVBoxLayout(card)
         self.onboarding_combo = QComboBox()
+        self.onboarding_combo.setObjectName('providerPresetSelector')
         self.onboarding_combo.setAccessibleName('연결할 AI 선택')
+        hint = '오른쪽 화살표 또는 Alt+아래쪽 화살표를 누르면 다른 AI 목록을 선택할 수 있습니다.'
+        self.onboarding_combo.setAccessibleDescription(hint)
+        self.onboarding_combo.setToolTip(hint)
+        arrow = QUrl.fromLocalFile(str(resources_root() / 'icons' / 'provider-select.svg'))
+        # QSS image loaders need a local filename, including decoded Unicode;
+        # QUrl supplies it for both source paths and PyInstaller's resource root.
+        arrow_path = arrow.toLocalFile().replace('\\', '/').replace('"', '\\"')
+        self.onboarding_combo.setStyleSheet('''
+            QComboBox#providerPresetSelector { padding-right: 44px; }
+            QComboBox#providerPresetSelector::drop-down {
+                subcontrol-origin: padding; subcontrol-position: top right;
+                width: 32px; border-left: 1px solid #d9e2ef;
+                border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+                background: #f1f5fb;
+            }
+            QComboBox#providerPresetSelector::drop-down:hover { background: #e5eefb; }
+            QComboBox#providerPresetSelector::down-arrow {
+                image: url("''' + arrow_path + '''"); width: 16px; height: 20px;
+            }
+        ''')
         for preset in CONNECTION_PRESETS:
             self.onboarding_combo.addItem(preset.title, preset.id)
         box.addWidget(self.onboarding_combo)

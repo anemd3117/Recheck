@@ -8,8 +8,8 @@
     6,
     0
   ],
-  "created_utc": "2026-11-17T12:08:06.867066+00:00",
-  "runtime_files": 126,
+  "created_utc": "2026-11-17T12:27:48.222654+00:00",
+  "runtime_files": 127,
   "runtime_identity": {
     "ai_providers/__init__.py": "7a085bce462e4c68904d54df174d9d471cc88d18e51224161032cabd84fd22c3",
     "ai_providers/contracts.py": "4ff51e156ccd360a72cc27044185678fe4d630f685339ba68952c7ca0c41252c",
@@ -58,7 +58,7 @@
     "recheck/process.py": "2655511f87c09595b56caaa3627221da8fa3876f7c4d2330a759c6044455370b",
     "recheck/provider_browser.py": "7001933e217f44846df9a16f70f9d12e00a78b5643870e86ea4c78087e6a2c3f",
     "recheck/provider_onboarding.py": "e15e11972de4e6e6ecac9f1f0c1efb933fb4738b9c2579f5962bcfaefb4da733",
-    "recheck/provider_ui.py": "e844d24b0d79569fe8ec8bc5c0e759072b13007ca4ecddc648b8c8c22fb01fa0",
+    "recheck/provider_ui.py": "4c61d603c076c83cb9b77da653782a6077fcbfb208d0362f8989400882df2b7c",
     "recheck/recommendations.py": "ed5ebbbdc15cb416fc4c69d0e10399f60dc8f689307ec8547cd3a8bc95f24bc6",
     "recheck/reconstruction.py": "e92a5a4fc1f91030c62930dadaae73e5f4839688542af6603879c73d44ac2300",
     "recheck/regression.py": "46a1824151645758ec5605a3747e6b66c7d66186b19fb4ad7669b7fc99ab4e72",
@@ -100,6 +100,7 @@
     "resources/docker/static/worker.mjs": "539e155ffc422ae5ab0a786d29fd252c36b1101e8baf074bcb4e7c9d104920e2",
     "resources/docker/windows/Dockerfile": "82571fcb66650efdb6e67d78f7ade6c81f5c4f038f257fe1666b79a7567514dc",
     "resources/ghidra/RecheckExport.java": "7c47fa49fd0b3d60840e7031d3fe306fb0600a28c8833c0f6025b24e8edeaa40",
+    "resources/icons/provider-select.svg": "408c780ed63cfc332bfabb3cd7d0df27b1e711f3d07ecc881454616db2231a24",
     "resources/report.html": "f8ce0879db9c450bea901b933f14951a921a969c64b3219e7be5f073b0fd3806",
     "resources/runtime/environment.json": "05fefec61aa22af957e995f3b776e6c5c31b51f7033863685d7bc05a627440c1",
     "resources/schemas/interpretation-1.0.json": "2aa906bcd5d6e0e1403c3fcd3033d187de4d2b1a8b62d28541878ea71390b3cf",
@@ -138,10 +139,10 @@
     "scripts/verify_source.py": "086b9d775dd5271077277806efee405e3171170c9cbd62351dffafefa3977735",
     "Setup-Recheck.ps1": "f848c19849856a47ca41950bd8a90a66d14e6c25dcd75e083846154c67901a0b"
   },
-  "aggregate_sha256": "18f7866e66d249979d851f113a290bf225579483ad6ea6695d8e909c9701c487",
+  "aggregate_sha256": "70f42bbf9abd59d23ab44de65f0b058a5c0fda5464494bccb8f907fdb5115edb",
   "aggregate_algorithm": "sha256 of UTF-8 sorted compact JSON runtime_identity",
   "verification": {
-    "record": "verification/embedded-login-production/final-source-checks-05",
+    "record": "verification/embedded-login-production/final-source-checks-06",
     "pytest": "exit 0",
     "node": "exit 0",
     "inputs": {
@@ -295,7 +296,7 @@
     "environment": {
       "PYTHONUTF8": "1",
       "QT_QPA_PLATFORM": "offscreen",
-      "RECHECK_DATA_DIR": "verification/embedded-login-production/final-source-checks-05/test-data",
+      "RECHECK_DATA_DIR": "verification/embedded-login-production/final-source-checks-06/test-data",
       "python_version": "3.14.8 (main, Oct 14 2026, 01:07:21) [MSC v.1944 64 bit (AMD64)]",
       "python_executable": "python.exe",
       "platform": "win32"
