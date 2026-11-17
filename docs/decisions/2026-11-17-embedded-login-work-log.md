@@ -2,7 +2,7 @@
 
 - 날짜: 2026-11-17
 - 브랜치: `experiment/qwebengine-login`
-- 상태: 제품 통합과 후속 사용 흐름 수정 중 · 최종 소스·실행본·공개 배포 확인 대기
+- 상태: 0.1.6 구현·최종 소스·Windows 실행본·공개 배포·전체 다운로드 확인 완료 · 브랜치 정리 대기
 - 관련 결정: [ADR-0005](0005-integrated-provider-connections.md), [외부 기본값](0006-external-browser-default.md), [분석별 단일 AI](0007-single-ai-per-analysis.md)
 
 기록은 초기 통합 → 실제 화면에서 발견한 문제 → 외부 기본값 변경 → 연결 상태·분석별 선택 순서로 남긴다. 앞선 단계의 미검증과 통과 수는 당시 상태이며, 현재 판정은 마지막 후속 기록을 따른다. 브랜치 이름은 작업 당시의 식별자이며 삭제 뒤에도 문서·릴리스의 고정 커밋으로 이력을 확인한다.
@@ -106,3 +106,28 @@
 최종 `final-source-checks-09`는 Python 3.14.8에서 pytest **2,162 통과·1 건너뜀(100.25초)**, Node **7 통과**로 종료 코드 0이었다. 소스·리소스 127개 파일의 aggregate는 `bcead810370a23dd5594ebd6e544f2c41d3afc4921a34f52fd99c20f66079ef1`이다. Ruff와 diff 공백 검사도 통과했다. 이 결과는 연결 상태 확인·연결 중단·연결 해제·이번 비교의 단일 AI 선택과 후속 표시 수정을 포함한 소스 검사다.
 
 새 빌드의 실제 실행·전체 ZIP·정확한 SHA의 CI·게시·다운로드 결과는 확인 후 이 온라인 기록에 추가한다. 소스 검사 통과만으로 새 실행본이나 공개 배포가 완료됐다고 표시하지 않는다.
+
+## 공개 배포 확인 · 0.1.6
+
+2026-11-17에 [PR #8](https://github.com/leekmny/Recheck/pull/8)을 병합하고 [Recheck 0.1.6 Windows x64 미리보기](https://github.com/leekmny/Recheck/releases/tag/v0.1.6)를 공개했다. 릴리스는 prerelease이며 draft가 아니다. 태그가 가리키는 main 커밋은 [`4c73e78b8ca0d13ab143f8b4d0eed80692e31786`](https://github.com/leekmny/Recheck/commit/4c73e78b8ca0d13ab143f8b4d0eed80692e31786)이다. 아래 결과는 위 계획의 후속 완료 기록이며, 과거 미검증 상태와 검사 수는 수행 당시의 기록으로 보존한다.
+
+### 최종 소스·병합·CI
+
+- 최종 소스 검사는 위 source09의 **Python 2,162 통과·1 건너뜀, Node 7 통과**다. 병합한 소스도 새 로컬 전체 검사에서 **2,162 통과·1 건너뜀(101.90초), Node 7 통과**를 확인했다.
+- 병합 후보 브랜치의 [Unit tests](https://github.com/leekmny/Recheck/actions/runs/44092477122)와 [Security analysis](https://github.com/leekmny/Recheck/actions/runs/44092477234)가 모두 성공했다.
+- 최종 main 커밋의 [Unit tests](https://github.com/leekmny/Recheck/actions/runs/44093168679)와 [Security analysis](https://github.com/leekmny/Recheck/actions/runs/44093168597)도 모두 성공했다.
+- 실행본에 결합된 소스·리소스 127개 파일의 aggregate는 `bcead810370a23dd5594ebd6e544f2c41d3afc4921a34f52fd99c20f66079ef1`이다. 온라인 완료 기록은 번들 문서와 실행본을 바꾸지 않고 추가한다.
+
+### 새 Windows 실행본의 실제 확인
+
+`native07`은 종료 코드 0이었다. 실제 앱 시작 5.20초, 도구 확인 2.06초, 분석 환경 준비 11.48초, 동적 비교 36.11초를 기록했으며 각각 정상 종료했다. 고정 입력 세 개의 실제 표준출력·표준오류·종료 코드를 실행 전 정답과 대조해 **2개 일치·1개 차이**를 확인했다. 검사 전후 배포 파일은 변하지 않았다.
+
+평소 앱 데이터로 새 EXE를 실행해 ChatGPT·Gemini의 저장된 연결 상태 복원, 연결 상태 버튼과 연결 해제 버튼 세 개, 내장 표시 체크박스 기본 해제, 비교 AI 선택란의 화살표를 확인했다. 기존 준비된 인증 세 개는 바뀌지 않았으며 ChatGPT의 도구 호출은 준비되지 않은 상태로 유지했다. 이 확인을 연결 해제 실행이나 모든 제공자의 새 인증·추론 성공으로 확대하지 않는다. 호스트 경로가 차단된 환경은 아니었으므로 깨끗한 다른 PC·VM의 첫 설치 검증도 아니다.
+
+EXE SHA-256: `0740d1704391a5519a5ff741445e04c3192434631d2515a6e4171136c6869039`.
+
+### 공개 ZIP 확인과 남은 작업
+
+공개 자산 `Recheck-Windows-x64.zip`의 크기는 **861,617,740바이트**, SHA-256은 `c8b26f46e3b81893d2a6539a692aeb46e9be066c3347e88c1ae93163bfccfa4f`다. GitHub 자산 ID는 `759195594`이며 서버의 digest가 로컬 ZIP과 일치함을 확인했다. 이어서 **인증 없이 공개 자산 전체를 내려받아 HTTP 200, 861,617,740바이트와 같은 SHA-256**을 독립 확인했다. ZIP 시작 식별자도 `PK 03 04`로 확인했다. 서버 digest 대조와 실제 전체 다운로드 검증을 각각 수행한 결과다.
+
+원격 브랜치를 다시 조회해 병합된 `experiment/qwebengine-login`과 `audit/verification4-quality`가 남아 있지 않고 `main`만 있음을 확인했다. 로컬의 두 브랜치와 `feature/login-progress`도 main에 포함된 커밋임을 확인한 뒤 정리했다. 문서 완료 기록을 검증하기 위한 임시 브랜치에도 같은 병합 확인 원칙을 적용한다. 미병합 PR #9의 기여자 포크와 기존 태그·자산은 보존한다. Free 계정의 새 내장 경로, Google 내장 로그인, 모든 제공자의 실제 키·모델, 깨끗한 Windows 설치, Windows 대상 실행 worker와 다중 AI 병렬 비교는 이번 공개로 완료된 범위가 아니다.

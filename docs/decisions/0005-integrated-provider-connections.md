@@ -1,8 +1,8 @@
 # ADR-0005 · AI 연결 화면과 선택 가능한 내장 표시를 제품에 통합한다
 
-- 상태: 수락 · 구현 중 · 실제 계정과 배포 판정 대기
+- 상태: 수락 · 0.1.6 구현·Windows 미리보기 공개 배포 완료
 - 날짜: 2026-11-17
-- 적용 범위: 0.1.6 개발 브랜치의 Recheck UI·Windows 미리보기 배포
+- 적용 범위: Recheck 0.1.6 UI·Windows x64 미리보기 배포
 - 대체·구체화: [초기 로그인 실험](0001-embedded-login-experiment.md), [공통 제공자 제안](0004-provider-onboarding.md)
 
 ## 배경과 문제
@@ -49,6 +49,8 @@ WebEngine은 선택 표시 기능이지만 배포본에는 실행에 필요한 �
 ## 검증과 재검토
 
 [구현 설계](../superpowers/specs/2026-11-17-embedded-provider-connections-design.md), [작업 계획](../superpowers/plans/2026-11-17-embedded-provider-connections.md), [진행 기록](2026-11-17-embedded-login-work-log.md)을 따른다. 실제 계정과 frozen EXE 결과를 확인하기 전에는 기능 지원·배포 성공으로 표시하지 않는다. 실제 계정 범위는 [인증 상태](../AI_AUTH_STATUS.md)에 분리한다.
+
+2026-11-17에 [PR #8](https://github.com/leekmny/Recheck/pull/8)을 병합하고 [0.1.6 Windows 미리보기](https://github.com/leekmny/Recheck/releases/tag/v0.1.6)를 공개했다. 최종 소스는 Python 2,162개·Node 7개 검사 통과와 Python 1개 건너뜀을 확인했고, 새 EXE의 실제 실행·고정 입력 정답·기존 연결 상태 복원을 확인했다. 정상 앱 데이터의 ChatGPT 한 연결과 Gemini API 두 연결의 준비 상태를 보존했으며 ChatGPT 도구 호출은 준비되지 않은 상태로 유지했다. 이는 모든 제공자의 실제 키·내장 로그인·새 계정·깨끗한 PC 설치를 확인한 결과가 아니다. 정확한 커밋·CI·배포 해시와 남은 범위는 [최종 공개 기록](2026-11-17-embedded-login-work-log.md#공개-배포-확인--016)을 따른다.
 
 제공자 정책·콘솔 주소·인증 계약이 바뀌거나 실제 호환 문제가 확인되면 해당 경로를 재검토한다. 지원되지 않는 제공자의 내장 로그인을 성공한 것으로 일반화하지 않는다.
 

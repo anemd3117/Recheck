@@ -8,9 +8,11 @@
 | [0002 · 개발용 비밀정보](0002-development-secrets.md) | 현행 유지, `.env` 도입 보류 | 사용자 DPAPI 저장소와 기존 환경 변수 참조를 유지 |
 | [0003 · Windows 배포 구성](0003-windows-bundle-mode.md) | 현행 유지, `onefile` 전환 보류 | 현재 `onedir` 배포·검증·복구 경로를 유지 |
 | [0004 · 제공자별 연결 준비](0004-provider-onboarding.md) | 0005로 구체화 | GPT·Gemini·Grok·DeepSeek·Claude 공통 안내의 초기 제안 |
-| [0005 · 제품 연결 화면 통합](0005-integrated-provider-connections.md) | 구현 중, 배포 확인 대기 | 기존 인증 검증과 선택 가능한 내장 표시·공식 키 콘솔을 제품에 통합 |
-| [0006 · 외부 브라우저 기본값](0006-external-browser-default.md) | 수락, 실제 계정 검증 별도 | 외부 기본·내장 선택 유지, Google 제한의 상세 근거와 실패 관측 구분 |
-| [0007 · 분석별 AI 하나 선택](0007-single-ai-per-analysis.md) | 수락, 최종 검증 진행 중 | 연결 상태 확인·해제, 실행별 선택 고정, 다중 AI 병렬 비교 보류 |
+| [0005 · 제품 연결 화면 통합](0005-integrated-provider-connections.md) | 수락, 0.1.6 구현·공개 배포 완료 | 기존 인증 검증과 선택 가능한 내장 표시·공식 키 콘솔을 제품에 통합 |
+| [0006 · 외부 브라우저 기본값](0006-external-browser-default.md) | 수락, 0.1.6 적용·공개 배포 완료 | 외부 기본·내장 선택 유지, Google 제한의 상세 근거와 실제 계정 범위 구분 |
+| [0007 · 분석별 AI 하나 선택](0007-single-ai-per-analysis.md) | 수락, 0.1.6 구현·공개 배포 완료 | 연결 상태 확인·해제, 실행별 선택 고정, 다중 AI 병렬 비교 보류 |
+
+0.1.6의 소스·Windows 실행본·CI·공개 자산 확인은 [최종 작업 기록](2026-11-17-embedded-login-work-log.md#공개-배포-확인--016)에 남긴다. 구현·배포 완료가 모든 제공자의 실제 계정 검증이나 깨끗한 PC 설치 완료를 뜻하지는 않는다.
 
 ## 팀에서 사용하는 방법
 
