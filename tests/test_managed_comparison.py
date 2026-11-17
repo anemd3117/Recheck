@@ -53,6 +53,58 @@ def test_absent_cil_is_unobserved_instead_of_equal():
     assert result['matches'][0]['cil_observation'] == 'unobserved'
 
 
+@pytest.mark.parametrize('digest', ['not-a-hash', 'g' * 64, 'a' * 63, True, 7])
+def test_invalid_cil_digest_cannot_claim_equal_bytes_and_headers(digest):
+    left, right = artifact(), artifact()
+    for value in (left, right):
+        value['functions'][0]['managed_method']['body']['il_sha256'] = digest
+    result = compare_static_artifacts(left, right)
+    assert result['matches'][0]['cil_observation'] == 'unobserved'
+    assert result['managed_differences'] == []
+
+
+@pytest.mark.parametrize('field', [
+    'il_sha256', 'max_stack', 'init_locals', 'local_var_sig_token', 'exception_regions',
+])
+def test_missing_cil_header_is_unobserved_even_when_missing_on_both_sides(field):
+    left, right = artifact(), artifact()
+    for value in (left, right):
+        value['functions'][0]['managed_method']['body'].pop(field)
+    result = compare_static_artifacts(left, right)
+    assert result['matches'][0]['cil_observation'] == 'unobserved'
+    assert result['managed_differences'] == []
+
+
+@pytest.mark.parametrize('field,value', [
+    ('max_stack', True), ('max_stack', -1), ('max_stack', None),
+    ('init_locals', 0), ('init_locals', None),
+    ('local_var_sig_token', 0), ('local_var_sig_token', 'invalid-token'),
+    ('exception_regions', None), ('exception_regions', {}), ('exception_regions', [False]),
+])
+def test_invalid_cil_header_on_either_side_does_not_become_a_comparison(field, value):
+    left, right = artifact(), artifact()
+    left['functions'][0]['managed_method']['body'][field] = value
+    result = compare_static_artifacts(left, right)
+    assert result['matches'][0]['cil_observation'] == 'unobserved'
+    assert result['managed_differences'] == []
+
+
+@pytest.mark.parametrize('body', [None, [], 'present'])
+def test_invalid_cil_body_is_unobserved_instead_of_crashing(body):
+    left, right = artifact(), artifact()
+    left['functions'][0]['managed_method']['body'] = body
+    result = compare_static_artifacts(left, right)
+    assert result['matches'][0]['cil_observation'] == 'unobserved'
+
+
+def test_valid_cil_locals_signature_token_keeps_recorded_header_comparison():
+    left, right = artifact(), artifact()
+    for value in (left, right):
+        value['functions'][0]['managed_method']['body']['local_var_sig_token'] = '0x11000001'
+    result = compare_static_artifacts(left, right)
+    assert result['matches'][0]['cil_observation'] == 'equal_bytes_and_headers'
+
+
 def test_managed_worker_artifact_retains_its_own_tool_identity():
     value = static_artifact(analysis_kind='managed', tool='REA MCP / Managed metadata')
     assert _validate_artifact(value, DIGEST)

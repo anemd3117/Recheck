@@ -167,14 +167,29 @@ def compare_static_artifacts(original, rebuilt):
     left, right = index(original), index(rebuilt)
     matches, differences, used_left, used_right = [], [], set(), set()
     fields = ('il_sha256', 'max_stack', 'init_locals', 'local_var_sig_token', 'exception_regions')
+
+    def observed_body(body):
+        # A missing header is not an observed null header; validate the fields
+        # used below before claiming either equality or a CIL difference.
+        if not isinstance(body, dict) or any(field not in body for field in fields):
+            return False
+        digest, token = body['il_sha256'], body['local_var_sig_token']
+        return (body.get('status') == 'present'
+                and isinstance(digest, str) and re.fullmatch('[a-fA-F0-9]{64}', digest)
+                and type(body['max_stack']) is int and body['max_stack'] >= 0
+                and type(body['init_locals']) is bool
+                and (token is None or isinstance(token, str) and re.fullmatch('0x[a-fA-F0-9]{8}', token))
+                and isinstance(body['exception_regions'], list)
+                and all(isinstance(region, dict) for region in body['exception_regions']))
+
     for key, candidates in left.items():
         peers = right.get(key, [])
         if len(candidates) != 1 or len(peers) != 1:
             continue
         a, b = candidates[0], peers[0]
-        body_a, body_b = a['managed_method']['body'], b['managed_method']['body']
-        observed = all(body.get('status') == 'present' and body.get('il_sha256') for body in (body_a, body_b))
-        values = [{field: body.get(field) for field in fields} for body in (body_a, body_b)]
+        body_a, body_b = a['managed_method'].get('body'), b['managed_method'].get('body')
+        observed = all(observed_body(body) for body in (body_a, body_b))
+        values = [{field: body[field] for field in fields} for body in (body_a, body_b)] if observed else []
         state = 'unobserved' if not observed else 'equal_bytes_and_headers' if values[0] == values[1] else 'different'
         pair = dict(original=a['id'], reimplementation=b['id'], score=1.0,
                     reason='선언 타입·메서드 이름·해석된 시그니처가 양쪽에서 유일하게 일치',

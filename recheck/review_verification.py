@@ -81,6 +81,10 @@ def verify_recheck_result(source, suite, result):
     _require([case.get('test_id') for case in cases] == ids
              and all(case.get('status') == 'resolved' and case.get('saved_input_reproduced') is True for case in cases),
              '저장 입력이 재현되어 현재 두 파일이 일치했다고 확인되지 않았습니다.')
+    reproduced = RegressionLibrary.recheck_result(suite, result)
+    _require(reproduced['counts'] == dict(resolved=len(ids), still_different=0, unmeasured=0)
+             and all(case['saved_input_reproduced'] is True for case in reproduced['case_results']),
+             '실제 재검사 입력·실행 조건이 저장된 입력과 다릅니다.')
     _require(regression.get('policy') == 'pair_equivalence' and regression.get('reference_changed') is False,
              '기준 파일 또는 재검사 판정 범위를 확인하세요.')
     original_hash = (source.get('files', {}).get('original') or {}).get('sha256')

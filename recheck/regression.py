@@ -55,6 +55,50 @@ def _recorded_policy(run):
     raise ValueError('분석 당시 출력 정규화 정책을 확인할 수 없어 저장하지 않았습니다.')
 
 
+def _test_inputs(values):
+    try:
+        return {test.id: test.model_dump() for test in validate_tests(values)}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _same_input(expected, actual):
+    if not isinstance(actual, dict):
+        return False
+    parsed = _test_inputs([actual]).get(expected['id'])
+    return parsed is not None and (
+        {Path(value).name for value in parsed['aux_files']}
+        == {Path(value).name for value in expected['aux_files']}
+    ) and all(
+        parsed[key] == expected[key]
+        for key in ('args', 'stdin', 'env', 'timeout_seconds', 'limits')
+    )
+
+
+def _actual_input_matches(expected, observation):
+    if not isinstance(observation, dict):
+        return False
+    # Older adapters may only record the engine's row input. When actual
+    # execution provenance exists, it must not contradict that registered input.
+    if 'actual_input' in observation:
+        actual = observation['actual_input']
+        if not isinstance(actual, dict) or any(
+            actual.get(key) != expected[key] for key in ('args', 'stdin', 'env')
+        ):
+            return False
+        if not expected['aux_files'] and actual.get('auxiliary_files', []) != []:
+            return False
+    if 'limits' in observation:
+        limits = observation['limits']
+        required = {key: value for key, value in expected['limits'].items() if value is not None}
+        required['timeout_seconds'] = expected['timeout_seconds']
+        if not isinstance(limits, dict) or any(
+            limits.get(key) != value for key, value in required.items()
+        ):
+            return False
+    return True
+
+
 def _read_auxiliary(path, expected_sha256):
     path = Path(path)
     if _link(path) or not path.is_file():
@@ -308,6 +352,12 @@ class RegressionLibrary:
     @staticmethod
     def recheck_result(suite, run):
         rows = run.get('dynamic') or []
+        expected_tests = _test_inputs(suite.get('tests', []))
+        registered = _test_inputs(run.get('tests', []))
+        try:
+            policy_matches = _recorded_policy(run) == suite['comparison_policy']
+        except ValueError:
+            policy_matches = False
         results = []
         for saved in suite['cases']:
             test_id = saved['test_id']
@@ -317,7 +367,14 @@ class RegressionLibrary:
             else:
                 current = dict(test_id=test_id, match=None, execution_status='unmeasured',
                                observation_categories=['invalid_observation' if candidates else 'not_executed'])
-            reproduced = True
+            expected_test = expected_tests.get(test_id)
+            reproduced = bool(
+                policy_matches and expected_test and len(candidates) == 1
+                and _same_input(expected_test, registered.get(test_id))
+                and _same_input(expected_test, candidates[0].get('input'))
+                and all(_actual_input_matches(expected_test, candidates[0].get(side))
+                        for side in ('original', 'reimplementation'))
+            )
             if saved['auxiliary']:
                 expected = {item['name']: item['sha256'] for item in saved['auxiliary']}
                 for side in ('original', 'reimplementation'):

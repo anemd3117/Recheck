@@ -2,6 +2,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import shutil
 from pathlib import Path
 import pytest
 from recheck.adapters import DockerAdapter, GhidraAdapter, validate_static
@@ -164,6 +165,60 @@ def test_timeout_kill_inspect_logs_cleanup(tmp_path):
     result = asyncio.run(adapter.execute(binary, {}, "run", "a", tmp_path / "w"))
     assert result["timed_out"] and not result["oom_killed"] and not result["infrastructure_ok"]
     assert calls[-4:] == ["kill", "inspect", "logs", "rm"]
+
+
+def test_auxiliary_evidence_hashes_staged_bytes_when_source_changes(tmp_path, monkeypatch):
+    binary = tmp_path / "fixture"
+    binary.write_bytes(b"not executable")
+    auxiliary = tmp_path / "source.txt"
+    auxiliary.write_bytes(b"OLD")
+    adapter = DockerAdapter(cli="docker")
+    original_copy = shutil.copy2
+
+    def copy_then_change_source(source, destination):
+        copied = original_copy(source, destination)
+        if Path(source).name == auxiliary.name:
+            auxiliary.write_bytes(b"NEW")
+        return copied
+
+    async def probe():
+        return dict(ready=True, os="linux", arch="amd64", local_endpoint=True)
+
+    async def call(*args, **kwargs):
+        if args[0] == "inspect":
+            return process(
+                json.dumps(
+                    [dict(State=dict(Status="exited", ExitCode=0, OOMKilled=False, Error=""))]
+                )
+            )
+        return process("id" if args[0] == "create" else "")
+
+    adapter.probe, adapter.call = probe, call
+    monkeypatch.setattr("recheck.adapters.shutil.copy2", copy_then_change_source)
+    work = tmp_path / "work"
+    result = asyncio.run(
+        adapter.execute(
+            binary,
+            {"auxiliary_files": [{"source": str(auxiliary), "name": "input.txt"}]},
+            "run",
+            "a",
+            work,
+        )
+    )
+    assert result["status"] == "success"
+    assert auxiliary.read_bytes() == b"NEW"
+    assert (Path(result["input_staging"]["artifact"]) / "input.txt").read_bytes() == b"OLD"
+    expected = [
+        {
+            "name": "input.txt",
+            "sha256": "099d90cbee62f89e6478e153eb3240efcbe4ac2231bedc3e84549bbeaaba87e8",
+        }
+    ]
+    assert result["actual_input"]["auxiliary_files"] == expected
+    persisted = json.loads(
+        (work / (result["container_name"] + ".json")).read_text(encoding="utf-8")
+    )
+    assert persisted["actual_input"]["auxiliary_files"] == expected
 
 
 def test_ghidra_java_required_from_installation(tmp_path, monkeypatch):

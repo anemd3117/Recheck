@@ -234,7 +234,8 @@ def test_recheck_distinguishes_equal_pair_from_original_reference_behavior(sourc
     suite = cases.save_from_run(run['run_id'], test_ids=['different'])
     new = copy.deepcopy(run)
     new['files']['original']['sha256'] = 'c' * 64
-    new['dynamic'] = [dict(test_id='different', original=observation(b'new'), reimplementation=observation(b'new'))]
+    new['dynamic'] = [dict(test_id='different', input=copy.deepcopy(suite['tests'][0]),
+                           original=observation(b'new'), reimplementation=observation(b'new'))]
     result = cases.recheck_result(suite, new)
     assert result['reference_changed'] is True
     assert result['case_results'][0]['status'] == 'resolved'
@@ -263,6 +264,123 @@ def test_recheck_changed_auxiliary_is_not_a_resolved_saved_input(source, tmp_pat
     result = cases.recheck_result(suite, new)
     assert result['case_results'][0]['status'] == 'unmeasured'
     assert result['case_results'][0]['saved_input_reproduced'] is False
+
+
+@pytest.mark.parametrize('field,value', [
+    ('args', ['changed']), ('stdin', 'changed'), ('env', {'LANGUAGE': 'en'}),
+    ('timeout_seconds', 8), ('limits', {'memory_mb': 512}),
+])
+@pytest.mark.parametrize('location', ['registered', 'row', 'actual'])
+def test_recheck_different_input_with_same_id_is_unmeasured(source, field, value, location):
+    store, run = source
+    cases = library(store.root)
+    suite = cases.save_from_run(run['run_id'], test_ids=['different'])
+    new = copy.deepcopy(run)
+    test = copy.deepcopy(suite['tests'][0])
+    row = dict(test_id='different', input=copy.deepcopy(test),
+               original=observation(), reimplementation=observation())
+    new.update(tests=[test], dynamic=[row])
+    if location == 'registered':
+        test[field] = value
+    elif location == 'row':
+        row['input'][field] = value
+    else:
+        for side in ('original', 'reimplementation'):
+            row[side]['actual_input'] = dict(args=['100'], stdin='hello\n', env={'LANGUAGE': 'ko'},
+                                             auxiliary_files=[])
+            row[side]['limits'] = dict(memory_mb=256, cpus=1, output_bytes=1048576, timeout_seconds=7)
+        if field in ('timeout_seconds', 'limits'):
+            row['reimplementation']['limits'].update(
+                {'timeout_seconds': value} if field == 'timeout_seconds' else value)
+            if field == 'limits':
+                suite['tests'][0]['limits'] = {'memory_mb': 256}
+                test['limits'] = {'memory_mb': 256}
+                row['input']['limits'] = {'memory_mb': 256}
+        else:
+            row['reimplementation']['actual_input'][field] = value
+    outcome = cases.recheck_result(suite, new)
+    assert outcome['case_results'][0]['status'] == 'unmeasured'
+    assert outcome['case_results'][0]['saved_input_reproduced'] is False
+    assert outcome['counts'] == {'resolved': 0, 'still_different': 0, 'unmeasured': 1}
+
+
+@pytest.mark.parametrize('missing', ['registered', 'row'])
+def test_recheck_missing_registered_or_row_input_cannot_claim_reproduction(source, missing):
+    store, run = source
+    cases = library(store.root)
+    suite = cases.save_from_run(run['run_id'], test_ids=['different'])
+    new = copy.deepcopy(run)
+    new['dynamic'] = [dict(test_id='different', input=copy.deepcopy(suite['tests'][0]),
+                           original=observation(), reimplementation=observation())]
+    if missing == 'registered':
+        new['tests'] = []
+    else:
+        del new['dynamic'][0]['input']
+    assert cases.recheck_result(suite, new)['case_results'][0]['status'] == 'unmeasured'
+
+
+def test_recheck_equivalent_defaults_and_changed_descriptions_preserve_input(source):
+    store, run = source
+    cases = library(store.root)
+    suite = cases.save_from_run(run['run_id'], test_ids=['timeout'])
+    new = copy.deepcopy(run)
+    new['tests'] = [dict(id='timeout', args=[], stdin='', env={}, timeout_seconds=5,
+                         limits={'memory_mb': None}, description='new explanation',
+                         verification_status='executed')]
+    new['dynamic'] = [dict(test_id='timeout', input={'id': 'timeout'},
+                           original=observation(), reimplementation=observation())]
+    outcome = cases.recheck_result(suite, new)
+    assert outcome['counts'] == {'resolved': 1, 'still_different': 0, 'unmeasured': 0}
+    assert outcome['case_results'][0]['saved_input_reproduced'] is True
+
+
+def test_recheck_matching_actual_provenance_preserves_saved_input(source):
+    store, run = source
+    cases = library(store.root)
+    suite = cases.save_from_run(run['run_id'], test_ids=['different'])
+    new = copy.deepcopy(run)
+    observed = observation(actual_input=dict(args=['100'], stdin='hello\n', env={'LANGUAGE': 'ko'},
+                                            auxiliary_files=[]),
+                           limits=dict(memory_mb=256, cpus=1, output_bytes=1048576, timeout_seconds=7))
+    new['dynamic'] = [dict(test_id='different', input=copy.deepcopy(suite['tests'][0]),
+                           original=copy.deepcopy(observed), reimplementation=copy.deepcopy(observed))]
+    outcome = cases.recheck_result(suite, new)
+    assert outcome['counts'] == {'resolved': 1, 'still_different': 0, 'unmeasured': 0}
+    assert outcome['case_results'][0]['saved_input_reproduced'] is True
+
+
+@pytest.mark.parametrize('location', ['registered', 'row', 'actual'])
+def test_recheck_unexpected_auxiliary_file_is_not_the_saved_input(source, location):
+    store, run = source
+    cases = library(store.root)
+    suite = cases.save_from_run(run['run_id'], test_ids=['different'])
+    new = copy.deepcopy(run)
+    test = copy.deepcopy(suite['tests'][0])
+    row = dict(test_id='different', input=copy.deepcopy(test),
+               original=observation(), reimplementation=observation())
+    new.update(tests=[test], dynamic=[row])
+    if location == 'registered':
+        test['aux_files'] = ['extra.dat']
+    elif location == 'row':
+        row['input']['aux_files'] = ['extra.dat']
+    else:
+        row['reimplementation']['actual_input'] = dict(
+            args=['100'], stdin='hello\n', env={'LANGUAGE': 'ko'},
+            auxiliary_files=[dict(name='extra.dat', sha256='a' * 64)])
+    outcome = cases.recheck_result(suite, new)
+    assert outcome['counts'] == {'resolved': 0, 'still_different': 0, 'unmeasured': 1}
+    assert outcome['case_results'][0]['saved_input_reproduced'] is False
+
+
+def test_recheck_changed_recorded_policy_cannot_claim_resolution(source):
+    store, run = source
+    cases = library(store.root)
+    suite = cases.save_from_run(run['run_id'], test_ids=['different'])
+    new = copy.deepcopy(run)
+    new['settings']['normalize_newlines'] = True
+    new['dynamic'] = [dict(test_id='different', input=copy.deepcopy(suite['tests'][0]),
+                           original=observation(), reimplementation=observation())]
+    assert cases.recheck_result(suite, new)['case_results'][0]['status'] == 'unmeasured'
 
 
 @pytest.mark.asyncio

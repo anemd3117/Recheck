@@ -323,7 +323,10 @@ class DockerAdapter:
                 raise ValueError("중복 보조 파일명")
             shutil.copy2(filesystem_path(source), filesystem_path(stage / name))
             aux_record.append(
-                {"name": name, "sha256": hashlib.sha256(filesystem_path(source).read_bytes()).hexdigest()}
+                {
+                    "name": name,
+                    "sha256": hashlib.sha256(filesystem_path(stage / name).read_bytes()).hexdigest(),
+                }
             )
         # Docker --mount uses CSV; quote source paths containing commas.
         # Preserve run-local artifacts; Docker Desktop may reject execution behind

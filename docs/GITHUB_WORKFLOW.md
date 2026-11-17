@@ -1,6 +1,6 @@
 # GitHub에서 Recheck 이어서 개발하기
 
-앱 소스의 기준 버전은 1.2.5-prototype.1입니다. 공개 저장소는 검토한 소스 스냅샷에서 새 이력으로 시작했으며, Windows EXE ZIP은 버전별 검증 후 [정확한 태그의 Releases](https://github.com/leekmny/Recheck/releases/tag/v1.2.5-prototype.1)에서 제공합니다. 실제 실행·AI 인증·분석 데이터는 각 작업 PC에서 관리합니다. 이전 개발 기록·태그·실행 파일은 별도의 비공개 저장소에 보존합니다. [공개 이력 구성](PUBLIC_HISTORY.md)을 먼저 읽으세요.
+앱 소스의 기준 버전은 0.1.4입니다. 공개 저장소는 검토한 소스 스냅샷에서 새 이력으로 시작했으며, Windows EXE ZIP은 버전별 검증 후 [정확한 태그의 Releases](https://github.com/leekmny/Recheck/releases/tag/v0.1.4)에서 제공합니다. 실제 실행·AI 인증·분석 데이터는 각 작업 PC에서 관리합니다. 이전 개발 기록·태그·실행 파일은 별도의 비공개 저장소에 보존합니다. [공개 이력 구성과 버전 대응표](PUBLIC_HISTORY.md)를 먼저 읽으세요.
 
 ## 저장소와 공동 작업자
 
@@ -17,9 +17,13 @@ GitHub의 **Code**에서 저장소 주소를 복사해 Git 또는 GitHub Desktop
 ```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements-lock.txt
+$env:QT_QPA_PLATFORM = 'offscreen'
+$env:RECHECK_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) ('recheck-tests-' + [guid]::NewGuid().ToString('N'))
 .venv\Scripts\python -m pytest -q
-.venv\Scripts\python launch.py
+node --test resources/docker/static/normalize.test.mjs resources/docker/static/managed.test.mjs
 ```
+
+평소 앱 데이터로 실행하려면 별도 셸에서 `.venv\Scripts\python launch.py`를 사용합니다.
 
 프로젝트 메타데이터의 Python 요구 버전은 3.11 이상이며 현재 Windows 배포는 Python 3.14.8로 빌드합니다. 프로그램 실행·구조 비교에는 Docker 분석 환경이, AI 설명에는 선택한 AI 연결이 필요합니다. ZIP 구성 비교는 Docker·AI 없이 사용할 수 있습니다. 새 사용자의 Gemini 무료 시작과 추천 GPT 연결은 [AI 연결 안내](AI_CONNECTIONS.md)를 따르세요. 사용자의 키를 소스·릴리스에 넣지 않습니다.
 
@@ -51,6 +55,16 @@ git status --short
 git diff
 ```
 
+검사 셸에는 위의 `QT_QPA_PLATFORM`과 새로운 `RECHECK_DATA_DIR`를 설정하세요.
+시험 데이터는 개인 분석·설정·인증 폴더와 분리합니다. 앱을 평소 데이터로 실행할 때는
+별도 셸을 사용하거나 시험용 환경 변수를 해제하세요. CI의 필수 job 이름은 `tests`로 유지합니다.
+
+재검사 회귀 검사는 ID가 같더라도 인자·표준입력·환경·입력별 제한·비교 정책이 달라지면
+저장 입력의 해결로 인정하지 않는지 확인합니다. 관리 코드 검사는 잘못된 CIL 해시나
+누락된 헤더를 일치 대신 미관측으로 남기는지 확인합니다. 보조 파일 증거는 실제로
+격리 실행에 전달한 복사본의 해시를 기록합니다. 이 검사들은 실제 Docker 실행·AI 응답
+검증과 구분하며, 새 입력 사례의 기대값은 원시 관찰과 독립적으로 정합니다.
+
 확인한 파일만 골라 commit합니다. 다음 예제의 파일명과 메시지는 실제 변경 내용으로 바꿉니다.
 
 ```powershell
@@ -69,7 +83,7 @@ GitHub에서 변경 내용을 Pull Request로 열고 검사 결과와 확인한 
 | Git 저장소 | Python 소스·리소스·테스트·고정 의존성·선별한 안내 문서·빌드 정의 |
 | 각 PC | `.venv/`, `build/`, `dist/`, 캐시, `verification/`, 실제 분석 입력·결과·원시 QA 자료 |
 | Recheck 로컬 보안 저장소 | 각 사용자의 API 키·OAuth 토큰·보호된 인증 자료 |
-| 공개 GitHub Releases | 재배포 자료·빌드·실행을 검증한 버전별 Windows ZIP. [1.2.5 배포 경로](https://github.com/leekmny/Recheck/releases/tag/v1.2.5-prototype.1)의 Assets 확인 |
+| 공개 GitHub Releases | 재배포 자료·빌드·실행을 검증한 버전별 Windows ZIP. [0.1.4 배포 경로](https://github.com/leekmny/Recheck/releases/tag/v0.1.4)의 검증 범위와 Assets 확인 |
 
 기본 앱 데이터는 `%LOCALAPPDATA%\Recheck`에 저장합니다. `RECHECK_DATA_DIR`로 별도 위치를 지정할 수도 있습니다. 이 데이터를 소스 저장소로 옮겨 공유하지 않습니다. 문제 재현용 자료가 필요하면 인증 정보와 개인 자료를 제거한 작은 예제를 별도로 만듭니다.
 
@@ -88,6 +102,14 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
 전체 pytest와 Node 검사를 통과하고 검사 전후 입력 파일이 같을 때 소스 식별자를 갱신합니다. 빌드는 새 staging에 생성하며 현재 사용자 EXE는 교체하지 않습니다. 기본 공개 빌드는 Recheck.exe·실행용 Python/Qt·고지·대응 소스와 선별 문서를 준비하고 Docker TAR는 제외합니다. 실제 Windows EXE와 frozen CLI 검사 후 정식 `dist/Recheck`와 외부 사용자 폴더를 동일 파일로 반영합니다. 실패·중단 시 이전 폴더를 복원하며 ZIP과 전체 inventory도 대조합니다. 정확한 명령·복구 절차·지원 한계는 [배포·복구 안내](DISTRIBUTION_AND_RECOVERY.md)를 따르세요.
+
+`scripts/verify_source.py --output <새 검사 폴더>`는 기존 runtime_identity와 별도로
+`verification.inputs`에 테스트·fixture·pytest 설정·CI 정의의 SHA-256을 기록합니다.
+검사 중 이 파일이 추가·삭제·변경되어도 성공 식별자를 갱신하지 않습니다.
+`verification.commands`와 `verification.environment`에는 실제 검사 명령·종료 코드,
+Python 실행 환경과 시험용 환경 변수를 기록합니다. 전체 환경 변수나 인증 정보는 수집하지 않습니다.
+기존 `runtime_identity`와 aggregate의 대상·계산 의미는 유지합니다. 이 기록은 사용한
+검사 입력의 식별 근거이며 Windows 배포본 실행이나 동작의 정확성 증명은 아닙니다.
 
 ## PR·릴리스 설명에 남길 내용
 

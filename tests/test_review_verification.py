@@ -71,6 +71,29 @@ def test_review_result_does_not_accept_stale_behavior_or_unmeasured_as_resolved(
         module.verify_recheck_result(source, suite, result)
 
 
+@pytest.mark.parametrize('field,value', [('args', ['changed']), ('stdin', 'changed'),
+                                        ('env', {'LANGUAGE': 'en'}), ('timeout_seconds', 8)])
+def test_review_proof_rejects_changed_input_despite_cached_resolved_claim(field, value):
+    source = issue_run()
+    test = dict(id='changed', args=['100'], stdin='saved', env={'LANGUAGE': 'ko'}, timeout_seconds=7)
+    suite = dict(suite_id='suite_' + 'b' * 32, name='saved input', source_run_id=source['run_id'],
+                 source_files=copy.deepcopy(source['files']),
+                 comparison_policy=dict(normalize_newlines=False, trim_trailing_whitespace=False),
+                 tests=[copy.deepcopy(test)],
+                 cases=[dict(test_id='changed', baseline={}, auxiliary=[])])
+    result = copy.deepcopy(source)
+    result.update(run_id='run_' + 'b' * 32, status='success', tests=[test], static={}, llm={}, agent={})
+    result['dynamic'] = [dict(test_id='changed', input=copy.deepcopy(test),
+                              original=copy.deepcopy(source['dynamic'][0]['original']),
+                              reimplementation=copy.deepcopy(source['dynamic'][0]['original']))]
+    result['tests'][0][field] = value
+    result['regression'] = dict(suite_id=suite['suite_id'], source_run_id=source['run_id'],
+                                policy='pair_equivalence', reference_changed=False,
+                                case_results=[dict(test_id='changed', status='resolved', saved_input_reproduced=True)])
+    with pytest.raises(ValueError):
+        verification().verify_recheck_result(source, suite, result)
+
+
 def test_normal_gui_review_exports_and_rechecks_new_record(app, tmp_path, monkeypatch):
     module = verification()
     from recheck.engine import Engine
