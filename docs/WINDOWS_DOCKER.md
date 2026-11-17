@@ -12,7 +12,7 @@
 
 Windows 컨테이너에는 대화형 데스크톱이 없다. Hyper-V isolation이 독립 커널을 제공해도 Windows 11 데스크톱 VM과 같아지지는 않는다. [Microsoft의 컨테이너 적용 범위](https://learn.microsoft.com/en-us/virtualization/windowscontainers/quick-start/lift-shift-to-containers), [시스템 요구사항](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/system-requirements), [버전 호환 표](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/version-compatibility).
 
-현재 Docker는 사용자별 설치의 Linux/amd64 엔진이다. Docker 문서상 사용자별 설치는 Windows 컨테이너를 지원하지 않는다. Windows 컨테이너를 사용하려면 설치 방식과 Hyper-V·Containers 기능까지 바뀔 수 있어 앱이 전역 모드를 자동 전환해서는 안 된다. [Docker Windows 설치 모드](https://docs.docker.com/desktop/setup/install/windows-install/).
+조사 당시 Docker는 사용자별 설치의 Linux/amd64 엔진이었다. Docker 문서상 사용자별 설치는 Windows 컨테이너를 지원하지 않는다. Windows 컨테이너를 사용하려면 설치 방식과 Hyper-V·Containers 기능까지 바뀔 수 있어 앱이 전역 모드를 자동 전환해서는 안 된다. [Docker Windows 설치 모드](https://docs.docker.com/desktop/setup/install/windows-install/).
 
 ## 이 PC에서 확인한 내용
 
@@ -40,7 +40,7 @@ python scripts/probe_windows_vm.py --context desktop-linux --probe-image sha256:
 
 먼저 사용할 이미지의 코드·버전을 검토하고 immutable digest를 기록한다. Windows 미디어는 Microsoft 또는 정식 권한이 있는 출처에서 직접 확보한다. generic 설치 키는 활성화 라이선스가 아니며 VM 사용 권한은 별도로 확인한다. [Microsoft 평가판](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise)은 등록 및 기간 조건이 있는 평가 경로다. 설치 미디어·계정 등록·약관 수락을 자동으로 대신하지 않았다.
 
-구성의 이미지는 2026-11-16 registry metadata로 확인한 Linux/amd64 manifest `dockurr/windows@sha256:59f8bed19cfd49cf1701debe34f9df6311e61a4e2ae68aa9f41206e2184e31cc`로 고정했다. metadata 확인만 했으며 실제 image pull·설치·게스트 검증은 하지 않았다. 공급망 검토와 사용 환경 검증을 거친 뒤 별도로 준비한다. 구성에 필요한 값은 `RECHECK_WINDOWS_VM_ISO`(로컬 x64 ISO), `RECHECK_WINDOWS_VM_STORAGE`(전용 새 빈 폴더), `RECHECK_WINDOWS_VM_PASSWORD`(시험용 새 암호)다. 암호나 해석된 compose 전체는 Git·보고서에 넣지 않는다. 기존 VM·Kali 폴더를 storage로 지정하지 않는다.
+구성의 이미지는 2026-11-16 registry metadata로 확인한 Linux/amd64 manifest `dockurr/windows@sha256:59f8bed19cfd49cf1701debe34f9df6311e61a4e2ae68aa9f41206e2184e31cc`로 고정했다. metadata 확인만 했으며 실제 image pull·설치·게스트 검증은 하지 않았다. 공급망 검토와 사용 환경 검증을 거친 뒤 별도로 준비한다. 구성에 필요한 값은 `RECHECK_WINDOWS_VM_ISO`(로컬 x64 ISO), `RECHECK_WINDOWS_VM_STORAGE`(전용 새 빈 폴더), `RECHECK_WINDOWS_VM_PASSWORD`(시험용 새 암호)다. 암호나 해석된 compose 전체는 Git·보고서에 넣지 않는다. 기존 VM이나 다른 자료가 든 폴더를 storage로 지정하지 않는다.
 
 사용자가 설치 조건을 확인하고 필요한 값을 설정한 다음 다음 순서로 별도 설치 시험을 진행한다. `config --quiet`는 구성 파싱만 한다. `pull_policy: never`이므로 검토한 이미지를 먼저 명시적으로 준비해야 한다.
 

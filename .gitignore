@@ -27,6 +27,7 @@ build/
 /docs/*
 !/docs/PROJECT_AUDIT_REPORT.md
 !/docs/superpowers/
+!/docs/decisions/
 !/docs/REVIEW_AND_RECHECK.md
 !/docs/ANALYSIS_MODES.md
 !/docs/GEMINI_FREE_SETUP.md

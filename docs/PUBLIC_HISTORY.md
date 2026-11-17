@@ -20,8 +20,8 @@
 
 공개 이력 시작점의 소스 버전은 1.2.1-prototype.1이었으며, 그 작업 자체는 새 EXE
 배포가 아니었습니다. 이후의 Windows 배포는 검토한 소스와 실제 실행 검증을 기준으로
-새 공개 태그·Releases에 분리합니다. 현재 소스는 0.1.4이며 배포 경로는
-[해당 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.4)입니다.
+새 공개 태그·Releases에 분리합니다. 이 문서의 소스 버전은 0.1.6입니다.
+실행 ZIP과 게시 결과는 [릴리스 목록](https://github.com/leekmny/Recheck/releases)을 확인하세요. [0.1.5 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)는 이전 배포 기록입니다.
 과거 비공개 EXE의 원본 소스는 보관본의 해당 태그와 embedded source identity가
 기준이며, 새 공개 버전의 자산과 혼동하지 않습니다.
 
@@ -40,6 +40,8 @@
 | `v1.2.4-prototype.1` | `v0.1.2` | 분석 모드 분리와 도구 설치 안내 |
 | `v1.2.5-prototype.1` | `v0.1.3` | 확인 범위·문제 입력 재검사·실패 보고서 |
 | 후속 검증 보완 | `v0.1.4` | 재검사 입력·CIL 근거·보조 파일 해시 및 검증 기록 보완 |
+| 코드 감사·품질 개선 | `v0.1.5` | ZIP 무결성·보고서·사전 준비 검사·도구 탐색·배포 검증 보완 |
+| AI 연결 통합 | `0.1.6` | 공통 연결·외부 기본값·상태 확인·분석별 단일 AI 선택. 실행본·게시 결과는 해당 릴리스에서 확인 |
 
 이 정리는 공개 저장소의 버전 이름에만 적용합니다. 위의 공개 시작점과
 비공개 보관본의 역사적 버전·태그·EXE 식별자는 당시 이름과 해시를 유지합니다.
@@ -61,7 +63,7 @@
    관리 명령에는 검토한 `--branch`와 `--tag`를 명시합니다.
 6. 공개 로그·댓글·첨부에는 인증 정보·개인 분석 원본·로컬 QA를 넣지 않습니다.
    공개 범위와 제보 방법은 [PUBLICATION_SCOPE.md](PUBLICATION_SCOPE.md),
-   [SECURITY.md](../SECURITY.md)를 따릅니다.
+   [SECURITY.md](https://github.com/leekmny/Recheck/blob/main/SECURITY.md)를 따릅니다.
 
 공개 시작 후의 결과는 공개 Actions와 이후 PR에서 확인합니다. 초기 공개 CI가
 완료되기 전에 과거 비공개 CI를 새 공개 CI의 성공으로 표시하지 않습니다.

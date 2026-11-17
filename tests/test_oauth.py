@@ -184,6 +184,276 @@ def service(tmp_path, provider):
     return module().OAuthService(store, transport=httpx.MockTransport(provider.handler)), store
 
 
+class RecoveryFixture(ProviderFixture):
+    """Use distinct grants for each real loopback authorization round."""
+
+    def __init__(self, provider='chatgpt', *, failures=1, error='invalid_grant', mutation=None):
+        super().__init__(provider, mutation=mutation)
+        self.failures, self.error = failures, error
+        self.authorizations = []
+        self.code_forms = []
+        self.before_callback = None
+        self.during_exchange = None
+
+    async def handler(self, request):
+        if str(request.url) != self.endpoints['token_endpoint']:
+            return await super().handler(request)
+        form = {key: values[0] for key, values in parse_qs(request.content.decode()).items()}
+        self.token_calls += 1
+        self.code_forms.append(form)
+        current = self.authorizations[-1]
+        assert form['code'] == 'fixture-code-round-' + str(len(self.authorizations))
+        assert form['redirect_uri'] == current['redirect_uri'][0]
+        challenge = (
+            base64.urlsafe_b64encode(
+                __import__('hashlib').sha256(form['code_verifier'].encode('ascii')).digest()
+            ).decode('ascii').rstrip('=')
+        )
+        assert challenge == current['code_challenge'][0]
+        if self.during_exchange is not None:
+            await self.during_exchange(self.token_calls)
+        if self.token_calls <= self.failures:
+            return httpx.Response(400, json={'error': self.error})
+        return httpx.Response(200, json=self.token(form['client_id']))
+
+    async def on_url(self, url):
+        self.auth = parse_qs(urlsplit(url).query)
+        self.authorizations.append({key: values[:] for key, values in self.auth.items()})
+        params = dict(code='fixture-code-round-' + str(len(self.authorizations)), state=self.auth['state'][0])
+        if self.provider == 'chatgpt' and len(self.authorizations) == 1:
+            requested = self.auth['client_id'][0]
+            params['client_id'] = 'oaiapp_fixture-issued' if requested == 'dynamic_agent_client' else requested
+        if self.before_callback is not None:
+            await self.before_callback(self.auth, params)
+        async with httpx.AsyncClient(trust_env=False) as client:
+            response = await client.get(self.auth['redirect_uri'][0], params=params)
+        assert response.status_code == 200
+
+
+def test_chatgpt_invalid_grant_reauthorizes_once_with_issued_id_and_fresh_binding(tmp_path):
+    async def scenario():
+        fixture = RecoveryFixture()
+        oauth, store = service(tmp_path, fixture)
+        events = []
+
+        async def before_callback(auth, params):
+            assert not list(tmp_path.glob('cred_*.json'))
+            if len(fixture.authorizations) == 2:
+                previous = fixture.authorizations[0]
+                async with httpx.AsyncClient(trust_env=False, timeout=0.2) as client:
+                    if previous['redirect_uri'] != auth['redirect_uri']:
+                        with pytest.raises((httpx.ConnectError, httpx.ConnectTimeout)):
+                            await client.get(previous['redirect_uri'][0])
+                    response = await client.get(
+                        auth['redirect_uri'][0], params={**params, 'state': previous['state'][0]},
+                    )
+                    assert response.status_code == 400
+                    changed_registration = await client.get(
+                        auth['redirect_uri'][0], params={**params, 'client_id': 'oaiapp_unrelated'},
+                    )
+                    assert changed_registration.status_code == 400
+                assert fixture.token_calls == 1
+
+        fixture.before_callback = before_callback
+        result = await oauth.login(
+            'chatgpt', 'profile-a', module().OAuthConfig(),
+            on_url=fixture.on_url, on_event=events.append,
+        )
+        assert len(fixture.authorizations) == fixture.token_calls == 2
+        first, second = fixture.authorizations
+        assert first['client_id'] == ['dynamic_agent_client']
+        assert second['client_id'] == ['oaiapp_fixture-issued']
+        assert 'agent_name_hint' in first and 'agent_name_hint' not in second
+        for key in ('state', 'nonce', 'code_challenge'):
+            assert first[key] != second[key]
+        assert first['ext_agent_host_id'] == second['ext_agent_host_id']
+        assert first['resource'] == second['resource']
+        assert first['scope'] == second['scope']
+        assert fixture.code_forms[0]['code'] != fixture.code_forms[1]['code']
+        assert fixture.code_forms[0]['code_verifier'] != fixture.code_forms[1]['code_verifier']
+        assert [event['status'] for event in events] == [
+            'callback_validated', 'token_exchange', 'authorization_restart',
+            'callback_validated', 'token_exchange', 'identity_verified',
+        ]
+        assert all(set(event) == {'kind', 'provider', 'profile_id', 'status'} for event in events)
+        assert all('oaiapp_' not in json.dumps(event) and 'http' not in json.dumps(event) for event in events)
+        assert result['client_id'] == 'oaiapp_fixture-issued'
+        assert store.get(result['credential_ref'], 'profile-a', 'https://api.openai.com')
+        assert len(list(tmp_path.glob('cred_*.json'))) == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('provider,error,rounds', [
+    ('chatgpt', 'invalid_grant', 2),
+    ('google', 'invalid_grant', 1),
+    ('chatgpt', 'invalid_client', 1),
+    ('chatgpt', 'invalid_scope', 1),
+    ('chatgpt', 'access_denied', 1),
+    ('chatgpt', 'temporarily_unavailable', 1),
+])
+def test_authorization_recovery_is_bounded_and_only_for_chatgpt_invalid_grant(
+    tmp_path, provider, error, rounds
+):
+    async def scenario():
+        fixture = RecoveryFixture(provider, failures=3, error=error)
+        oauth, _ = service(tmp_path, fixture)
+        events = []
+        config = module().OAuthConfig(
+            client_id='fixture.apps.googleusercontent.com' if provider == 'google' else '',
+        )
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(provider, 'profile-a', config, on_url=fixture.on_url, on_event=events.append)
+        assert raised.value.code == error
+        assert len(fixture.authorizations) == fixture.token_calls == rounds
+        assert [event['status'] for event in events].count('authorization_restart') == rounds - 1
+        assert not list(tmp_path.glob('cred_*.json'))
+
+    asyncio.run(scenario())
+
+
+def test_cancel_during_authorization_recovery_never_opens_a_second_round(tmp_path):
+    async def scenario():
+        fixture = RecoveryFixture()
+        oauth, _ = service(tmp_path, fixture)
+        cancel = threading.Event()
+
+        def observe(event):
+            if event['status'] == 'authorization_restart':
+                cancel.set()
+
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(
+                'chatgpt', 'profile-a', module().OAuthConfig(), cancel=cancel,
+                on_url=fixture.on_url, on_event=observe,
+            )
+        assert raised.value.code == 'cancelled'
+        assert len(fixture.authorizations) == fixture.token_calls == 1
+        assert not list(tmp_path.glob('cred_*.json'))
+
+    asyncio.run(scenario())
+
+
+def test_authorization_recovery_keeps_the_original_overall_login_deadline(tmp_path, monkeypatch):
+    async def scenario():
+        fixture = RecoveryFixture()
+        oauth, _ = service(tmp_path, fixture)
+        clock = [1000.0]
+        monkeypatch.setattr(module(), 'time', SimpleNamespace(monotonic=lambda: clock[0], time=time.time))
+
+        async def exchange(round_number):
+            if round_number == 2:
+                clock[0] += 1
+                await asyncio.sleep(0.1)
+
+        fixture.during_exchange = exchange
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(
+                'chatgpt', 'profile-a', module().OAuthConfig(timeout=0.2, http_timeout=2),
+                on_url=fixture.on_url,
+            )
+        assert raised.value.code == 'oauth_timeout'
+        assert len(fixture.authorizations) == fixture.token_calls == 2
+        assert not list(tmp_path.glob('cred_*.json'))
+
+    asyncio.run(scenario())
+
+
+def test_recovered_authorization_still_checks_existing_account_and_preserves_old_tokens(tmp_path):
+    async def scenario():
+        initial = RecoveryFixture(failures=0)
+        oauth, store = service(tmp_path, initial)
+        saved = await oauth.login('chatgpt', 'profile-a', module().OAuthConfig(), on_url=initial.on_url)
+        ref = saved['credential_ref']
+        before = store.get(ref, 'profile-a', 'https://api.openai.com')
+        recovery = RecoveryFixture()
+        recovery.subject = 'different-fixture-subject'
+        oauth.transport = httpx.MockTransport(recovery.handler)
+        config = module().OAuthConfig(
+            client_id=saved['client_id'], credential_ref=ref,
+            expected_subject=saved['account']['subject'],
+        )
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login('chatgpt', 'profile-a', config, on_url=recovery.on_url)
+        assert raised.value.code == 'oauth_account_mismatch'
+        assert len(recovery.authorizations) == recovery.token_calls == 2
+        after = store.get(ref, 'profile-a', 'https://api.openai.com')
+        assert after.version == before.version and after.value == before.value
+        assert {path.stem for path in tmp_path.glob('cred_*.json')} == {ref}
+
+    asyncio.run(scenario())
+
+
+def test_recovered_authorization_still_rejects_forged_id_token(tmp_path):
+    async def scenario():
+        fixture = RecoveryFixture(mutation='signature')
+        oauth, _ = service(tmp_path, fixture)
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login('chatgpt', 'profile-a', module().OAuthConfig(), on_url=fixture.on_url)
+        assert raised.value.code == 'oauth_id_token'
+        assert len(fixture.authorizations) == fixture.token_calls == 2
+        assert not list(tmp_path.glob('cred_*.json'))
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('source', ['discovery', 'jwks', 'observer'])
+def test_invalid_grant_outside_code_exchange_cannot_trigger_authorization_recovery(tmp_path, source):
+    async def scenario():
+        fixture = RecoveryFixture(failures=0)
+        original = fixture.handler
+
+        async def handler(request):
+            if (source == 'discovery' and str(request.url).endswith('/openid-configuration')
+                    or source == 'jwks' and str(request.url) == fixture.endpoints['jwks_uri']):
+                return httpx.Response(400, json={'error': 'invalid_grant'})
+            return await original(request)
+
+        oauth, _ = service(tmp_path, fixture)
+        oauth.transport = httpx.MockTransport(handler)
+        events = []
+
+        def observe(event):
+            events.append(event)
+            if source == 'observer' and event['status'] == 'callback_validated':
+                raise module().AuthError('invalid_grant', 'fixture-observer-error')
+
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(
+                'chatgpt', 'profile-a', module().OAuthConfig(),
+                on_url=fixture.on_url, on_event=observe,
+            )
+        assert raised.value.code == 'invalid_grant'
+        assert len(fixture.authorizations) == (0 if source == 'discovery' else 1)
+        assert fixture.token_calls == (1 if source == 'jwks' else 0)
+        assert not any(event['status'] == 'authorization_restart' for event in events)
+        assert not list(tmp_path.glob('cred_*.json'))
+
+    asyncio.run(scenario())
+
+
+def test_refresh_invalid_grant_never_starts_authorization_recovery(tmp_path, monkeypatch):
+    async def scenario():
+        fixture = ProviderFixture()
+        oauth, store = service(tmp_path, fixture)
+        saved = await oauth.login('chatgpt', 'profile-a', module().OAuthConfig(), on_url=fixture.on_url)
+        before = store.get(saved['credential_ref'], 'profile-a', 'https://api.openai.com')
+        browser_calls = []
+        monkeypatch.setattr(module().webbrowser, 'open', lambda *a, **k: browser_calls.append(a))
+        fixture.mutation = 'token_error'
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.refresh(
+                'chatgpt', 'profile-a', saved['credential_ref'],
+                module().OAuthConfig(client_id=saved['client_id']), force=True,
+            )
+        assert raised.value.code == 'invalid_grant'
+        assert fixture.token_calls == 2 and not browser_calls
+        after = store.get(saved['credential_ref'], 'profile-a', 'https://api.openai.com')
+        assert after.version == before.version and after.value == before.value
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize('name', ['chatgpt', 'google'])
 def test_real_loopback_code_pkce_signed_identity_and_dpapi_storage(tmp_path, name):
     async def scenario():
@@ -558,6 +828,133 @@ def test_browser_callback_failure_does_not_escape_with_sensitive_exception_text(
         with pytest.raises(module().AuthError) as raised:
             await oauth.login('chatgpt', 'profile-a', module().OAuthConfig(), on_url=failed)
         assert 'fixture-sensitive-callback' not in str(raised.value)
+
+    asyncio.run(scenario())
+
+
+def test_login_progress_requires_valid_callback_and_signed_identity(tmp_path, monkeypatch):
+    async def scenario():
+        fixture = ProviderFixture()
+        oauth, store = service(tmp_path, fixture)
+        events = []
+        browser_calls = []
+        monkeypatch.setattr(module().webbrowser, 'open', lambda *a, **k: browser_calls.append(a))
+
+        async def present(url):
+            fixture.auth = parse_qs(urlsplit(url).query)
+            async with httpx.AsyncClient(trust_env=False) as client:
+                response = await client.get(
+                    fixture.auth['redirect_uri'][0],
+                    params=dict(code='fixture-code', state='wrong', client_id='issued-client'),
+                )
+            assert response.status_code == 400
+            assert events == [] and fixture.token_calls == 0
+            await fixture.on_url(url)
+
+        async def observe(event):
+            assert set(event) == {'kind', 'provider', 'profile_id', 'status'}
+            assert event['kind'] == 'oauth_login'
+            assert event['provider'] == 'chatgpt' and event['profile_id'] == 'profile-a'
+            assert not list(tmp_path.glob('cred_*.json'))
+            if event['status'] in ('callback_validated', 'token_exchange'):
+                assert fixture.token_calls == 0
+            else:
+                assert event['status'] == 'identity_verified' and fixture.token_calls == 1
+                assert fixture.endpoints['jwks_uri'] in [url for url, _ in fixture.requests]
+            events.append(event)
+
+        result = await oauth.login(
+            'chatgpt', 'profile-a', module().OAuthConfig(), on_url=present, on_event=observe
+        )
+        assert [event['status'] for event in events] == [
+            'callback_validated', 'token_exchange', 'identity_verified'
+        ]
+        assert not browser_calls
+        assert store.get(result['credential_ref'], 'profile-a', 'https://api.openai.com')
+        encoded = json.dumps(events)
+        for value in (
+            'fixture-code', 'fixture-access-initial', 'fixture-refresh-initial',
+            'fixture@example.invalid', fixture.auth['state'][0], fixture.auth['nonce'][0],
+            fixture.auth['code_challenge'][0], fixture.auth['redirect_uri'][0],
+        ):
+            assert value not in encoded
+
+    asyncio.run(scenario())
+
+
+def test_forged_identity_never_emits_identity_verified_progress(tmp_path):
+    async def scenario():
+        fixture = ProviderFixture(mutation='signature')
+        oauth, _ = service(tmp_path, fixture)
+        events = []
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(
+                'chatgpt', 'profile-a', module().OAuthConfig(),
+                on_url=fixture.on_url, on_event=events.append,
+            )
+        assert raised.value.code == 'oauth_id_token'
+        assert [event['status'] for event in events] == ['callback_validated', 'token_exchange']
+        assert not list(tmp_path.glob('cred_*.json'))
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('action', ['cancel', 'display_failure', 'observer_failure'])
+def test_injected_login_failure_never_launches_external_browser_or_stores_tokens(
+    tmp_path, monkeypatch, action
+):
+    async def scenario():
+        fixture = ProviderFixture()
+        oauth, _ = service(tmp_path, fixture)
+        cancel = threading.Event()
+        events, browser_calls = [], []
+        monkeypatch.setattr(module().webbrowser, 'open', lambda *a, **k: browser_calls.append(a))
+
+        async def present(url):
+            if action == 'cancel':
+                cancel.set()
+            elif action == 'display_failure':
+                raise RuntimeError('fixture-sensitive-display')
+            else:
+                await fixture.on_url(url)
+
+        def observe(event):
+            events.append(event)
+            if event['status'] == 'identity_verified':
+                raise RuntimeError('fixture-sensitive-observer')
+
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(
+                'chatgpt', 'profile-a', module().OAuthConfig(), cancel=cancel,
+                on_url=present, on_event=observe,
+            )
+        assert raised.value.code == ('cancelled' if action == 'cancel' else 'oauth_login')
+        assert 'fixture-sensitive' not in str(raised.value)
+        assert not browser_calls and not list(tmp_path.glob('cred_*.json'))
+        assert fixture.token_calls == (1 if action == 'observer_failure' else 0)
+        if action != 'observer_failure':
+            assert not events
+
+    asyncio.run(scenario())
+
+
+def test_cancelling_from_identity_progress_prevents_secure_storage(tmp_path):
+    async def scenario():
+        fixture = ProviderFixture()
+        oauth, _ = service(tmp_path, fixture)
+        cancel = threading.Event()
+
+        def observe(event):
+            if event['status'] == 'identity_verified':
+                cancel.set()
+
+        with pytest.raises(module().AuthError) as raised:
+            await oauth.login(
+                'chatgpt', 'profile-a', module().OAuthConfig(), cancel=cancel,
+                on_url=fixture.on_url, on_event=observe,
+            )
+        assert raised.value.code == 'cancelled'
+        assert not list(tmp_path.glob('cred_*.json'))
 
     asyncio.run(scenario())
 

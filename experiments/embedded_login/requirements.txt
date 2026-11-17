@@ -1,0 +1,3 @@
+# Historical spike dependencies; current product integration also includes WebEngine.
+-r ../../requirements-lock.txt
+PySide6-WebEngine==6.12.0.140

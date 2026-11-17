@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 from pathlib import Path
+import threading
 import time
 
 import pytest
@@ -314,6 +315,182 @@ def test_oauth_login_binds_new_ref_account_and_persistent_host_without_claiming_
     assert status['account']['email'] == 'fixture@example.invalid'
     assert 'access_token' not in repr(status)
     assert 'oauth-fixture-access' not in json.dumps(manager.settings.model_dump())
+
+
+def test_oauth_login_forwards_presenter_and_rebuilds_safe_profile_progress(manager):
+    manager.save_profile(chatgpt_profile())
+    events, urls = [], []
+
+    class PresentedOAuth(MockOAuth):
+        async def login(self, provider, profile_id, config, cancel=None, on_url=None, *, on_event=None):
+            await on_url('https://auth.openai.com/fixture?state=fixture-sensitive')
+            await on_event({
+                'status': 'callback_validated', 'kind': 'untrusted', 'provider': 'untrusted',
+                'profile_id': 'another-profile', 'url': 'fixture-sensitive',
+            })
+            await on_event({'status': 'invented_success', 'secret': 'fixture-sensitive'})
+            return await super().login(provider, profile_id, config, cancel=cancel)
+
+    manager._oauth_service = PresentedOAuth(manager.store)
+
+    async def present(url):
+        urls.append(url)
+
+    async def observe(event):
+        events.append(event)
+        if event['status'] == 'profile_committed':
+            assert manager.account_status('chat')['authenticated'] is True
+            assert manager.get_profile('chat').credential_ref
+        else:
+            assert not manager.get_profile('chat').credential_ref
+
+    result = asyncio.run(manager.login('chat', on_event=observe, on_url=present))
+    assert result['authenticated'] is True and len(urls) == 1
+    assert [event['status'] for event in events] == [
+        'browser_requested', 'callback_validated', 'profile_committed'
+    ]
+    assert all(event['profile_id'] == 'chat' and event['kind'] == 'oauth_login' for event in events)
+    assert events[1] == {
+        'kind': 'oauth_login', 'provider': 'chatgpt', 'profile_id': 'chat',
+        'status': 'callback_validated',
+    }
+    assert 'fixture-sensitive' not in json.dumps(events)
+
+
+def test_oauth_authorization_restart_progress_does_not_expose_pending_registration(manager):
+    manager.save_profile(chatgpt_profile())
+    events = []
+
+    class RestartingOAuth(MockOAuth):
+        async def login(self, *args, on_event=None, **kwargs):
+            await on_event({
+                'status': 'authorization_restart', 'client_id': 'fixture-private-registration',
+                'profile_id': 'untrusted-profile',
+            })
+            assert not manager.get_profile('chat').credential_ref
+            assert not manager.get_profile('chat').oauth_client_id
+            return await super().login(*args, **kwargs)
+
+    manager._oauth_service = RestartingOAuth(manager.store)
+    assert asyncio.run(manager.login('chat', on_event=events.append))['authenticated'] is True
+    assert [event['status'] for event in events] == [
+        'browser_requested', 'authorization_restart', 'profile_committed'
+    ]
+    assert events[1] == {
+        'kind': 'oauth_login', 'provider': 'chatgpt', 'profile_id': 'chat',
+        'status': 'authorization_restart',
+    }
+    assert 'fixture-private-registration' not in json.dumps(events)
+
+
+def test_oauth_login_post_commit_observer_failure_keeps_returned_binding(manager):
+    manager.save_profile(chatgpt_profile())
+
+    class ObservedOAuth(MockOAuth):
+        async def login(self, *args, on_event=None, **kwargs):
+            return await super().login(*args, **kwargs)
+
+    manager._oauth_service = ObservedOAuth(manager.store)
+    observed = []
+
+    def observe(event):
+        observed.append(event['status'])
+        if event['status'] == 'profile_committed':
+            raise RuntimeError('fixture-sensitive-observer')
+
+    result = asyncio.run(manager.login('chat', on_event=observe))
+    assert observed[-1] == 'profile_committed'
+    assert result['authenticated'] is True
+    assert manager.account_status('chat')['authenticated'] is True
+
+
+def test_oauth_login_absent_hooks_supports_original_injected_service_signature(manager):
+    manager.save_profile(chatgpt_profile())
+
+    class LegacyOAuth(MockOAuth):
+        async def login(self, provider, profile_id, config, cancel=None):
+            return await super().login(provider, profile_id, config, cancel=cancel)
+
+    manager._oauth_service = LegacyOAuth(manager.store)
+    assert asyncio.run(manager.login('chat'))['authenticated'] is True
+
+
+def test_existing_manager_progress_callback_supports_original_oauth_service_signature(manager):
+    manager.save_profile(chatgpt_profile())
+    manager._oauth_service = MockOAuth(manager.store)
+    events = []
+    result = asyncio.run(manager.login('chat', on_event=events.append))
+    assert result['authenticated'] is True
+    assert [event['status'] for event in events] == ['browser_requested', 'profile_committed']
+
+
+def test_kwargs_oauth_service_receives_new_progress_and_requested_presenter(manager):
+    manager.save_profile(chatgpt_profile())
+    events, presented = [], []
+
+    async def present(url):
+        presented.append(url)
+
+    class KeywordOAuth(MockOAuth):
+        async def login(self, *args, **kwargs):
+            observe = kwargs.pop('on_event')
+            assert kwargs['on_url'] is present
+            await kwargs['on_url']('https://auth.openai.com/fixture')
+            await observe({'status': 'callback_validated'})
+            return await super().login(*args, **kwargs)
+
+    manager._oauth_service = KeywordOAuth(manager.store)
+    result = asyncio.run(manager.login('chat', on_event=events.append, on_url=present))
+    assert result['authenticated'] is True
+    assert presented == ['https://auth.openai.com/fixture']
+    assert [event['status'] for event in events] == [
+        'browser_requested', 'callback_validated', 'profile_committed'
+    ]
+
+
+def test_oauth_service_type_error_is_not_retried_without_requested_hooks(manager):
+    manager.save_profile(chatgpt_profile())
+    attempts = []
+
+    async def present(url):
+        raise AssertionError('The faulty service never reaches presentation')
+
+    class BrokenOAuth(MockOAuth):
+        async def login(self, *args, on_event=None, on_url=None, **kwargs):
+            attempts.append((on_event is not None, on_url is present))
+            raise TypeError('fixture-service-bug')
+
+    manager._oauth_service = BrokenOAuth(manager.store)
+    with pytest.raises(TypeError, match='fixture-service-bug'):
+        asyncio.run(manager.login('chat', on_event=lambda event: None, on_url=present))
+    assert attempts == [(True, True)]
+    assert not manager.get_profile('chat').credential_ref
+
+
+@pytest.mark.parametrize('action', ['cancel', 'profile_change'])
+def test_uncommitted_oauth_binding_never_emits_profile_committed(manager, action):
+    manager.save_profile(chatgpt_profile())
+    cancel = threading.Event()
+    events = []
+
+    class ObservedOAuth(MockOAuth):
+        async def login(self, *args, on_event=None, **kwargs):
+            return await super().login(*args, **kwargs)
+
+    service = ObservedOAuth(manager.store)
+    manager._oauth_service = service
+    if action == 'cancel':
+        service.after_login = cancel.set
+    else:
+        service.after_login = lambda: manager.save_profile(
+            {**manager.get_profile('chat').model_dump(), 'model': 'changed'}
+        )
+    with pytest.raises(ProviderError) as raised:
+        asyncio.run(manager.login('chat', cancel=cancel, on_event=events.append))
+    assert raised.value.code == ('cancelled' if action == 'cancel' else 'profile_stale')
+    assert not manager.get_profile('chat').credential_ref
+    assert not list(manager.store.root.glob('cred_*.json'))
+    assert [event['status'] for event in events] == ['browser_requested']
 
 
 def test_oauth_login_commit_failure_preserves_old_session_and_removes_new_ref(manager, monkeypatch):

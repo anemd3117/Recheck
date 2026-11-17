@@ -208,6 +208,10 @@ async def deadline(awaitable, cancel, seconds):
 
 
 def error_code(status, body):
+    if isinstance(body, dict):
+        error = body.get('error', body)
+        if isinstance(error, dict) and error.get('code') == 'subscription_sharing_user_not_eligible':
+            return 'subscription_sharing_user_not_eligible'
     text = json.dumps(body, ensure_ascii=False).lower()
     if status == 401:
         return 'authentication'

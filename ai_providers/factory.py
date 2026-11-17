@@ -708,6 +708,7 @@ async def probe_capabilities(provider, cancel=None, on_event=None):
         'additionalProperties': False,
     }
     calls = 0
+    terminal_plan_error = False
 
     async def ask(label, messages, tools=(), output_schema=None):
         nonlocal calls
@@ -730,6 +731,9 @@ async def probe_capabilities(provider, cancel=None, on_event=None):
         return response
 
     async def stage(label, action):
+        nonlocal terminal_plan_error
+        if terminal_plan_error:
+            return
         try:
             await action()
         except ProviderError as exc:
@@ -742,6 +746,8 @@ async def probe_capabilities(provider, cancel=None, on_event=None):
                     'message': '해당 기능 검사를 통과하지 못했습니다',
                 }
             )
+            if exc.code == 'subscription_sharing_user_not_eligible':
+                terminal_plan_error = True
         except (ValueError, KeyError, TypeError, AssertionError):
             result['errors'].append(
                 {
@@ -763,6 +769,15 @@ async def probe_capabilities(provider, cancel=None, on_event=None):
                 'inference_verified': False,
                 'code': exc.code,
             }
+
+        if (isinstance(result['connection'], dict)
+                and result['connection'].get('code') == 'subscription_sharing_user_not_eligible'):
+            terminal_plan_error = True
+            result['errors'].append({
+                'stage': 'connection',
+                'code': 'subscription_sharing_user_not_eligible',
+                'message': '해당 기능 검사를 통과하지 못했습니다',
+            })
 
         async def basic():
             response = await ask(
@@ -850,6 +865,9 @@ async def probe_capabilities(provider, cancel=None, on_event=None):
             result['tool_roundtrip'] = True
 
         await stage('tools', tool_roundtrip)
+        if terminal_plan_error:
+            for key in ('basic_chat', 'json_schema', 'tool_calls', 'tool_roundtrip'):
+                result[key] = False
         if result['basic_chat'] and result['json_schema']:
             result['available_modes'].append('automatic')
         if result['basic_chat'] and result['tool_calls'] and result['tool_roundtrip']:

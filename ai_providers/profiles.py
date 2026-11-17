@@ -952,7 +952,7 @@ class ProfileManager:
             timeout=profile.options.timeout_seconds,
         )
 
-    async def login(self, profile_id, options=None, cancel=None, on_event=None):
+    async def login(self, profile_id, options=None, cancel=None, on_event=None, *, on_url=None):
         if options is not None and not isinstance(options, dict):
             raise ProviderError('oauth_configuration', 'OAuth 등록 정보 형식을 확인하세요')
         options = dict(options or {})
@@ -981,7 +981,45 @@ class ProfileManager:
                 on_event,
                 {'kind': 'oauth_login', 'profile_id': profile_id, 'status': 'browser_requested'},
             )
-            result = await self.oauth_service.login(provider, profile_id, config, cancel=cancel)
+
+            async def auth_progress(event):
+                # Only known service stages cross the public log/UI boundary. Bind
+                # them to this operation rather than trusting an injected service.
+                status = event.get('status') if isinstance(event, dict) else None
+                if status in (
+                    'callback_validated', 'token_exchange', 'identity_verified', 'authorization_restart',
+                ):
+                    await emit(
+                        on_event,
+                        dict(
+                            kind='oauth_login', provider=provider,
+                            profile_id=profile_id, status=status,
+                        ),
+                    )
+
+            hooks = {}
+            if on_url is not None:
+                hooks['on_url'] = on_url
+            login = self.oauth_service.login
+            if on_event is not None:
+                # Manager progress existed before service progress injection.
+                # Preserve older injected services without retrying their bugs or
+                # dropping an explicitly requested presentation handler.
+                try:
+                    parameters = inspect.signature(login).parameters.values()
+                except (TypeError, ValueError):
+                    parameters = ()
+                if any(
+                    parameter.kind == inspect.Parameter.VAR_KEYWORD
+                    or parameter.name == 'on_event'
+                    and parameter.kind in (
+                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        inspect.Parameter.KEYWORD_ONLY,
+                    )
+                    for parameter in parameters
+                ):
+                    hooks['on_event'] = auth_progress
+            result = await login(provider, profile_id, config, cancel=cancel, **hooks)
             token_ref = result.get('credential_ref')
             if not token_ref or token_ref == profile.credential_ref:
                 raise ProviderError(
@@ -1023,6 +1061,18 @@ class ProfileManager:
                 if secret_ref != profile.oauth_client_secret_ref:
                     obsolete.append(profile.oauth_client_secret_ref)
                 self._cleanup(profile_id, obsolete, strict=True)
+            try:
+                await emit(
+                    on_event,
+                    dict(
+                        kind='oauth_login', provider=provider,
+                        profile_id=profile_id, status='profile_committed',
+                    ),
+                )
+            except Exception:
+                # The binding already committed. A progress observer must not
+                # turn that into a failed login or hide its credential reference.
+                pass
             return {**redact(status), 'authenticated': True, 'actual_inference_verified': False}
         finally:
             if not committed:

@@ -90,7 +90,7 @@ def test_success_records_checks_separately_from_runtime_identity(tmp_path):
     assert verification['commands'][0]['argv'][1:3] == ['-m', 'pytest']
     assert verification['commands'][1]['argv'][0:2] == ['node', '--test']
     assert verification['environment']['QT_QPA_PLATFORM'] == 'offscreen'
-    assert verification['environment']['RECHECK_DATA_DIR'] == str(tmp_path / 'records/test-data')
+    assert verification['environment']['RECHECK_DATA_DIR'] == 'records/test-data'
     assert json.loads((tmp_path / 'records/verified-source.json').read_text(encoding='utf-8')) == result
 
 
@@ -108,6 +108,30 @@ def test_failed_verification_preserves_existing_source_identity(tmp_path):
     with pytest.raises(RuntimeError, match='failed'):
         m.verify(tmp_path, tmp_path / 'records', runner=run)
     assert json.loads(identity.read_text()) == {'old': 'verified'}
+
+
+@pytest.mark.parametrize('outside_project', [False, True])
+def test_public_build_identity_omits_developer_paths_without_changing_execution(tmp_path, monkeypatch, outside_project):
+    m = importlib.import_module('scripts.verify_source')
+    root = tmp_path / 'project'
+    root.mkdir()
+    make_verifiable_project(root)
+    interpreter = str(tmp_path / 'private-user' / 'python.exe')
+    monkeypatch.setattr(m.sys, 'executable', interpreter)
+    output = tmp_path / 'private-records' if outside_project else root / 'records'
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs['env']['RECHECK_DATA_DIR']))
+        return subprocess.CompletedProcess(command, 0)
+
+    result = m.verify(root, output, runner=run)
+    assert calls[0][0][0] == interpreter
+    assert calls[0][1] == str(output / 'test-data')
+    public = json.dumps(result)
+    assert str(tmp_path) not in public
+    assert 'private-user' not in public and 'private-records' not in public
+    assert result['verification']['commands'][0]['argv'][0] == 'python'
 
 
 @pytest.mark.parametrize('launcher', ['Setup-Recheck.ps1', 'Run-Recheck.cmd'])
