@@ -21,7 +21,7 @@ import urllib.request
 
 REPOSITORY='leekmny/Recheck'
 BRANCH='feature/recheck-distribution-validation'
-TAG='v0.1.4'
+TAG='v0.1.5'
 API_VERSION='2026-03-10'
 ROOT=Path(__file__).resolve().parents[1]
 CHUNK=1024*1024
@@ -151,7 +151,8 @@ class GitHub:
             key=(run.get('workflow_id'),run.get('event'))
             if key in workflows:continue
             workflows.add(key); runs.append(safe_run(run))
-        complete=any(run['name']=='Unit tests' for run in runs) and all(run['status']=='completed' for run in runs)
+        required={'Unit tests','Security analysis'}
+        complete=required.issubset({run['name'] for run in runs}) and all(run['status']=='completed' for run in runs)
         return {'sha':sha,'event':event,'complete':complete,
                 'success':complete and all(run['conclusion']=='success' for run in runs),'runs':runs}
     def draft_pr(self,sha,title,body):
@@ -163,7 +164,7 @@ class GitHub:
         return {key:result.get(key) for key in ('number','html_url','draft','state')}
     def _green_ci(self,sha):
         status=self.ci(sha)
-        if not status['success']:raise SafeError('Exact-head Unit tests CI must be completed and green')
+        if not status['success']:raise SafeError('Exact-head Unit tests and Security analysis CI must be completed and green')
         return status
     def _pull(self,number,sha):
         if type(number) is not int or number<=0:raise SafeError('A positive PR number is required')

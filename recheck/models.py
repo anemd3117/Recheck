@@ -6,6 +6,7 @@ import os
 import re
 import struct
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -108,12 +109,18 @@ def load_settings(root=None) -> Settings:
 def atomic_json(path: Path, value: Any):
     path = filesystem_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + '.tmp')
-    with temp.open('w', encoding='utf-8') as stream:
-        json.dump(value, stream, ensure_ascii=False, indent=2, default=str)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temp, path)
+    temp = filesystem_path(path.with_name('.recheck-json-' + uuid.uuid4().hex + '.tmp'))
+    # Exclusive creation establishes ownership before cleanup can remove a file.
+    stream = temp.open('x', encoding='utf-8')
+    try:
+        with stream:
+            json.dump(value, stream, ensure_ascii=False, indent=2, default=str)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Windows replacement requires the temporary file's handle to be closed.
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def save_settings(settings: Settings, root=None):

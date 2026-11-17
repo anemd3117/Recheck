@@ -359,7 +359,7 @@ def test_image_reuse_requires_definition_hash(tmp_path):
     folder = tmp_path / "docker/linux"
     folder.mkdir(parents=True)
     (folder / "Dockerfile").write_text("FROM ubuntu:24.04\n")
-    adapter = DockerAdapter(cli="docker", resources=tmp_path)
+    adapter = DockerAdapter(cli="docker", resources=tmp_path, auto_prepare=True)
     calls = []
 
     async def probe():

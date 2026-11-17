@@ -46,8 +46,7 @@ class Engine:
 
     def _docker(self):
         if (
-            self.settings.static_backend != 'direct'
-            and (resources_root() / 'runtime/environment.json').is_file()
+            (resources_root() / 'runtime/environment.json').is_file()
         ):
             return self._managed_docker()
         adapter = DockerAdapter(context=self.settings.docker_context, resources=resources_root())
@@ -226,6 +225,13 @@ class Engine:
                 )
                 if not docker['ready']:
                     docker['status'] = 'blocked'
+            elif isinstance(docker_adapter, DockerAdapter) and docker.get('ready') and analysis_mode != 'static':
+                image = await safe(docker_adapter.image_readiness('linux', cancel=cancel))
+                docker['engine_ready'] = docker['ready']
+                docker['ready'] = image.get('ready') is True
+                docker['execution_image'] = image
+                if not docker['ready']:
+                    docker['status'] = 'blocked'
             if docker.get('ready'):
                 docker['leftovers'] = await safe(docker_adapter.leftovers())
             return dict(
@@ -311,6 +317,37 @@ class Engine:
         if mode == 'agent':
             return 'agent'
         return 'explain' if mode == 'automatic' and self._llm_requested() else 'off'
+
+    async def analysis_preflight(self, original, reimplementation, *, analysis_mode, cancel=None):
+        """Check the GUI/CLI start contract without registering an analysis run.
+
+        The pipeline still checks snapshots and tools after it starts, so a tool
+        disappearing after this check remains a recorded runtime failure.
+        """
+        from .analysis_setup import analysis_readiness
+
+        files = [await asyncio.to_thread(inspect_binary, path)
+                 for path in (original, reimplementation)]
+        readiness = analysis_readiness(analysis_mode, {},
+                                       static_backend=self.settings.static_backend, files=files)
+        input_blockers = [item for item in readiness['blockers'] if item['kind'] != 'tool']
+        if not input_blockers:
+            environment = await self.environment(cancel, analysis_mode=analysis_mode, include_ai=False)
+            readiness = analysis_readiness(analysis_mode, environment,
+                                           static_backend=self.settings.static_backend, files=files)
+        if files[0].get('os') != files[1].get('os'):
+            readiness['can_analyze'] = False
+            readiness['blockers'].append(dict(
+                guidance='두 파일의 대상 OS가 다릅니다. 같은 대상 OS의 파일을 선택하세요.'))
+        if cancelled(cancel):
+            return dict(status='cancelled', code='analysis_preflight_cancelled',
+                        message='분석을 시작하기 전에 취소했습니다.')
+        if not readiness['can_analyze']:
+            return dict(status='blocked', code='analysis_preflight_blocked',
+                        message='분석 시작 조건을 확인하세요. 분석 기록은 생성하지 않았습니다.',
+                        next_actions=list(dict.fromkeys(
+                            item['guidance'] for item in readiness['blockers'] + readiness['unknown'])))
+        return dict(status='ready')
 
     async def analyze(self, original, reimplementation, tests, mode='automatic', cancel=None,
                       *, analysis_mode=None, ai_mode=None):

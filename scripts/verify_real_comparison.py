@@ -7,18 +7,24 @@ from pathlib import Path
 import signal
 import sys
 import threading
+import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from recheck.models import load_settings, save_settings, atomic_json
+from recheck.models import load_settings, atomic_json
 from recheck.engine import Engine
 
 
 async def verify(args):
-    settings = load_settings()
+    data_dir = (
+        Path(args.data_dir).resolve()
+        if args.data_dir
+        else Path(args.summary).resolve().parent / ('real-comparison-data-' + uuid.uuid4().hex)
+    )
+    settings = load_settings(root=data_dir)
     settings.model = args.model
+    settings.active_ai_profile = 'legacy-local'
     settings.ghidra_path = args.ghidra or settings.ghidra_path
     settings.llm_timeout = 300
-    save_settings(settings)
     cancel = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: cancel.set())
 
@@ -29,7 +35,7 @@ async def verify(args):
                 flush=True,
             )
 
-    engine = Engine(settings, data_dir=args.data_dir, on_event=progress)
+    engine = Engine(settings, data_dir=data_dir, on_event=progress)
     tests = json.loads(Path(args.tests).read_text(encoding='utf-8-sig'))
     run = await engine.analyze(
         args.original, args.reimplementation, tests, mode=args.mode, cancel=cancel

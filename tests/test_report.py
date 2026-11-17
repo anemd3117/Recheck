@@ -2,8 +2,49 @@
 
 import copy
 import base64
+import pytest
 
 from recheck.report import render_report
+
+
+@pytest.mark.parametrize('environment', [
+    None,
+    ['unavailable'],
+    {'ghidra': None, 'docker': None, 'ollama': None},
+    {'ghidra': {'java': None}, 'docker': {'version': {'Server': None}}},
+    {'ghidra': {'java': 'not recorded'}, 'docker': {'version': {'Server': []}}},
+    {'docker': {'version': None}},
+])
+def test_report_preserves_unavailable_historical_environment(tmp_path, environment):
+    record = {'run_id': 'historical', 'status': 'partial', 'environment': environment}
+    before = copy.deepcopy(record)
+    document = render_report(record, tmp_path / 'history.html').read_text(encoding='utf-8')
+    assert record == before
+    assert '<td>Docker Engine</td><td>미기록</td>' in document
+    assert '<td>Java</td><td>미기록</td>' in document
+    assert '<td>Ollama</td><td>미기록</td>' in document
+    assert '<b>부분 완료</b>' in document
+
+
+def test_report_distinguishes_missing_null_and_failed_docker_observations(tmp_path):
+    for name, docker in (
+        ('missing', {}),
+        ('null', {'version': {'Server': None}}),
+        ('failed', {'version': {'Server': None}, 'status': 'failed', 'code': 'docker_daemon'}),
+    ):
+        record = {'run_id': name, 'status': 'partial', 'environment': {'docker': docker}}
+        before = copy.deepcopy(record)
+        document = render_report(record, tmp_path / (name + '.html')).read_text(encoding='utf-8')
+        assert record == before
+        assert '<td>Docker Engine</td><td>미기록</td>' in document
+        if name == 'null':
+            assert '&quot;Server&quot;: null' in document
+            assert '<td>Docker 관측 상태</td><td>서버 응답 없음 (null)</td>' in document
+        if name == 'failed':
+            assert 'docker_daemon' in document and '&quot;status&quot;: &quot;failed&quot;' in document
+            assert '<td>Docker 관측 상태</td><td>실패</td>' in document
+        if name == 'missing':
+            assert '<td>Docker 관측 상태</td><td>버전 미기록</td>' in document
 
 
 def test_managed_cil_difference_is_readable_and_escaped_in_report(tmp_path):

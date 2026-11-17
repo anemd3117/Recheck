@@ -5,9 +5,10 @@ import { createReadStream } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { normalizeDossier } from './normalize.mjs';
 import { normalizeManagedMembers } from './managed.mjs';
+import workerPackage from './package.json' with { type: 'json' };
 
 const ROOT = '/output';
-const versions = {rea: '6.7.0', ghidra: '12.1.4', java: '21.0.9+10', node: process.versions.node, worker_contract: 'rea-static-1.0'};
+const versions = {rea: workerPackage.dependencies['rea-agents'], ghidra: '12.1.4', java: '21.0.9+10', node: process.versions.node, worker_contract: 'rea-static-1.0'};
 const RAW_LIMIT = 48 * 1024 * 1024;
 const RESULT_LIMIT = 12 * 1024 * 1024;
 let client, transport, opened = false, deadline, operation, stderr = '', evidenceBytes = 0;
@@ -64,7 +65,7 @@ async function analyze(request) {
   const sha256 = hash.digest('hex');
   const tools = await connect();
   await save('tools-list.json', tools);
-  const session = await call('binary_session', {expected_package_version: versions.rea}, 'session-before.json');
+  const session = await call('binary_session', {expected_package_version: versions.rea, detail: 'complete'}, 'session-before.json');
   if (request.analysis_kind === 'managed') {
     if (!tools.tools.some(tool => tool.name === 'inspect_managed_members')) throw new Error('Pinned REA release does not advertise managed metadata inspection.');
     const evidence = await call('inspect_managed_members', {path: request.input}, 'managed-members.json');
@@ -84,7 +85,7 @@ async function analyze(request) {
   opened = true;
   const openedResult = await call('open_binary', {path: request.input, provider_id: 'ghidra'}, 'open.json');
   if (openedResult.result?.sha256 !== sha256) throw new Error('REA target SHA256 differs from the original input.');
-  const inventory = await call('list_procedures', {}, 'procedures.json');
+  const inventory = await call('list_procedures', {detail: 'complete'}, 'procedures.json');
   if (!Array.isArray(inventory.normalized_result)) throw new Error('Unsupported REA procedure inventory schema.');
   const procedures = inventory.normalized_result;
   const selected = procedures.slice(0, maxFunctions);
@@ -96,7 +97,7 @@ async function analyze(request) {
     if (remaining() < 1500) { budgetStopped = true; functions.push(normalizeDossier(proc, null, 'Worker time budget reached before function extraction.')); continue; }
     extracted++;
     try {
-      const dossier = await call('analyze_function', {procedure: proc.address}, `function-${String(index).padStart(5, '0')}.json`);
+      const dossier = await call('analyze_function', {procedure: proc.address, detail: 'complete'}, `function-${String(index).padStart(5, '0')}.json`);
       functions.push(normalizeDossier(proc, dossier));
     } catch (error) {
       failed++;
@@ -141,7 +142,7 @@ async function analyze(request) {
 }
 async function probe() {
   await connect();
-  const session = await call('binary_session', {expected_package_version: versions.rea});
+  const session = await call('binary_session', {expected_package_version: versions.rea, detail: 'complete'});
   const candidate = session.result?.analysis_provider_candidates?.find(item => item.provider.id === 'ghidra');
   const checks = candidate?.availability?.diagnostics?.checks ?? [];
   const ready = candidate?.availability?.status === 'available' && checks.length > 0 && checks.every(check => check.ok === true) && session.result?.server_identity?.package?.version === versions.rea;

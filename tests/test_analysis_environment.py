@@ -108,6 +108,6 @@ def test_auto_dynamic_mode_uses_packaged_execution_independently_of_static_tools
     engine = Engine(Settings(), tmp_path)
     run = {'mode': 'dynamic', 'static': {}, 'environment': {'ghidra': {'backend': 'direct'}}}
     assert isinstance(engine._execution_adapter(run), ManagedExecutionAdapter)
-    assert not isinstance(
+    assert isinstance(
         Engine(Settings(static_backend='direct'), tmp_path)._docker(), ManagedExecutionAdapter
     )

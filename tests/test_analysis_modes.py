@@ -24,7 +24,8 @@ def configured(tmp_path, monkeypatch):
     engine = Engine(Settings(model='fixture-selected-model'), tmp_path / 'results')
 
     async def environment(cancel=None, **kwargs):
-        return {'fixture': True}
+        return dict(ghidra=dict(ready=True, backend='direct'),
+                    docker=dict(ready=True, local_endpoint=True, os='linux', arch='amd64'))
 
     class Static:
         async def analyze(self, *args, **kwargs):

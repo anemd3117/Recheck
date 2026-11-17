@@ -87,6 +87,99 @@ def test_first_screen_defaults_and_test_schema(window):
     assert window.tests_value()[0]["stdin"] == ""
 
 
+@pytest.mark.parametrize('component,value', [
+    ('docker', {'ready': False, 'version': {'Server': None}}),
+    ('docker', {'ready': False, 'version': {'Server': []}}),
+    ('docker', None),
+    ('docker', 'unavailable'),
+    ('ghidra', None),
+    ('ghidra', ['unavailable']),
+    ('ghidra', {'ready': False, 'java': None}),
+    ('ghidra', {'ready': False, 'java': 'unavailable'}),
+    ('ollama', None),
+    ('ollama', ['unavailable']),
+])
+def test_environment_callback_keeps_unavailable_tools_actionable(window, component, value):
+    import copy
+    import json
+
+    result = {'ollama': {'connected': False}, 'docker': {'ready': False},
+              'ghidra': {'ready': False, 'java': {}}}
+    result[component] = value
+    before = copy.deepcopy(result)
+    window.environment_done(result)
+    assert result == before
+    assert json.loads(window.environment_view.toPlainText()) == before
+    assert '준비 완료' not in window.env_summary.text()
+    assert window.analysis_setup.state['can_analyze'] is False
+    assert '도구 설치·관리' in window.tool_help_text.text()
+    assert window._task_join_pending is False
+    assert window.worker is None
+
+
+def test_history_switch_clears_prior_run_details_and_answers(window):
+    from PySide6.QtCore import Qt
+
+    base = {'status': 'success', 'analysis_mode': 'static', 'ai_mode': 'off',
+            'analysis_status': {'static': 'success', 'dynamic': 'not_requested',
+                                'ai': 'not_requested'}}
+    records = {identifier: dict(base, run_id=identifier) for identifier in ('run_a', 'run_b')}
+    records['run_a']['evidence'] = [dict(evidence_id='ev_a', target='original',
+                                       kind='log', tool='fixture', data={'note': 'first run'})]
+    window.engine.store.list_runs = lambda: list(records.values())
+    window.engine.store.load_run = records.__getitem__
+    window.refresh_history()
+
+    def open_record(identifier):
+        row = next(window.history.topLevelItem(index)
+                   for index in range(window.history.topLevelItemCount())
+                   if window.history.topLevelItem(index).data(0, Qt.ItemDataRole.UserRole) == identifier)
+        window.history.setCurrentItem(row)
+        window.open_history()
+
+    open_record('run_a')
+    window.evidence_clicked(window.evidence_tree.topLevelItem(0))
+    window.evidence_id.setText('ev_a')
+    window.answer_view.setPlainText('Answer about run_a only')
+    open_record('run_b')
+    assert window.selected_run_id() == 'run_b'
+    assert window.evidence_tree.topLevelItemCount() == 0
+    assert window.evidence_details.toPlainText() == ''
+    assert window.evidence_id.text() == ''
+    assert window.answer_view.toPlainText() == ''
+
+
+def test_same_run_refresh_preserves_selected_evidence_and_answer(window):
+    record = {'run_id': 'same_run', 'status': 'partial'}
+    window.show_result(record)
+    window.evidence_details.setPlainText('Selected evidence for same_run')
+    window.evidence_id.setText('ev_same')
+    window.answer_view.setPlainText('Answer for same_run')
+    window.show_result(dict(record))
+    assert window.evidence_details.toPlainText() == 'Selected evidence for same_run'
+    assert window.evidence_id.text() == 'ev_same'
+    assert window.answer_view.toPlainText() == 'Answer for same_run'
+
+
+@pytest.mark.parametrize('switch_history', [False, True])
+def test_delayed_question_answer_belongs_to_the_selected_run(window, monkeypatch, switch_history):
+    completions = []
+    monkeypatch.setattr(window, 'launch_task',
+                        lambda title, work, complete: completions.append(complete) or True)
+    window.show_result({'run_id': 'run_a', 'status': 'partial'})
+    window.question_text.setText('Explain this run')
+    window.ask_question()
+    assert len(completions) == 1
+    if switch_history:
+        window.show_result({'run_id': 'run_b', 'status': 'partial'})
+    completions[0]({'answer': 'Answer specifically about run_a'})
+    if switch_history:
+        assert window.answer_view.toPlainText() == ''
+        assert window.selected_run_id() == 'run_b'
+    else:
+        assert 'Answer specifically about run_a' in window.answer_view.toPlainText()
+
+
 def test_comparison_reads_pending_easy_input_edits_and_keeps_limits(window):
     import json
 

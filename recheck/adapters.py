@@ -62,10 +62,34 @@ def discover_docker_cli():
 class DockerAdapter:
     images = {"linux": "recheck-analysis-linux:1", "windows": "recheck-analysis-windows:1"}
 
-    def __init__(self, cli=None, context="", resources=None):
+    def __init__(self, cli=None, context="", resources=None, *, auto_prepare=False):
         self.cli = cli or discover_docker_cli()
         self.context = context
         self.resources = Path(resources) if resources else resource_root()
+        self.auto_prepare = auto_prepare
+
+    def _definition_hash(self, target_os):
+        definition_dir = self.resources / "docker" / target_os
+        definition = hashlib.sha256()
+        for source in sorted(p for p in definition_dir.rglob("*") if p.is_file()):
+            definition.update(source.relative_to(definition_dir).as_posix().encode("utf-8"))
+            definition.update(b"\0" + source.read_bytes())
+        return definition.hexdigest()
+
+    async def image_readiness(self, target_os, cancel=None):
+        """Inspect the selected legacy image without building or downloading it."""
+        inspected = await self.call("image", "inspect", self.images[target_os], timeout=15, cancel=cancel)
+        ready = False
+        if _ok(inspected):
+            try:
+                details = json.loads(inspected["stdout"])[0]
+                labels = (details.get("Config") or {}).get("Labels") or {}
+                ready = (details.get("Os") == target_os
+                         and details.get("Architecture") in ("amd64", "x86_64")
+                         and labels.get("org.recheck.definition_sha256") == self._definition_hash(target_os))
+            except (ValueError, IndexError, TypeError, AttributeError):
+                pass
+        return dict(ready=ready, status='ready' if ready else 'blocked', image=self.images[target_os])
 
     def command(self, *args):
         if not self.cli:
@@ -175,11 +199,7 @@ class DockerAdapter:
             }
         image = self.images[target_os]
         definition_dir = self.resources / "docker" / target_os
-        definition = hashlib.sha256()
-        for source in sorted(p for p in definition_dir.rglob("*") if p.is_file()):
-            definition.update(source.relative_to(definition_dir).as_posix().encode("utf-8"))
-            definition.update(b"\0" + source.read_bytes())
-        definition_hash = definition.hexdigest()
+        definition_hash = self._definition_hash(target_os)
         inspected = await self.call("image", "inspect", image, timeout=15)
         build = None
         reusable = False
@@ -191,6 +211,9 @@ class DockerAdapter:
             except (ValueError, IndexError, TypeError, AttributeError):
                 reusable = False
         if not reusable:
+            if not self.auto_prepare:
+                return dict(status='blocked', error_code='execution_image_unprepared',
+                            error='실행 이미지를 명시적으로 준비한 뒤 다시 분석하세요. 자동 빌드는 시작하지 않았습니다.')
             _event(
                 on_event,
                 stage="image",
@@ -630,7 +653,7 @@ class DockerAdapter:
 class GhidraAdapter:
     def __init__(self, home=None, java_home=None, resources=None, cache_dir=None):
         self.home = self.discover(home)
-        self.java_home = java_home or os.environ.get("JAVA_HOME")
+        self.java_home = java_home
         self.resources = Path(resources) if resources else resource_root()
         self.cache_dir = Path(cache_dir) if cache_dir else None
 
@@ -673,21 +696,32 @@ class GhidraAdapter:
         return env
 
     async def probe(self):
-        java = (
-            str(Path(self.java_home) / "bin/java.exe")
-            if self.java_home and os.name == "nt"
-            else (
-                str(Path(self.java_home) / "bin/java") if self.java_home else shutil.which("java")
-            )
-        )
-        java_result = (
-            await run_process([java, "-version"], timeout=10)
-            if java
-            else {"error": "Java 미설치", "stderr": "", "stdout": "", "returncode": None}
-        )
-        text = java_result.get("stderr", "") + java_result.get("stdout", "")
-        found = re.search(r'version\s+"(?:1\.)?(\d+)', text)
-        major = int(found.group(1)) if found else None
+        from .prerequisites import _candidate_paths, _java_major
+
+        props = self.home / "Ghidra/application.properties" if self.home else None
+        values = {}
+        if props and props.is_file():
+            for line in props.read_text(encoding="utf-8").splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    key, value = line.split("=", 1)
+                    values[key.strip()] = value.strip()
+        required = int(values.get("application.java.min", "21") or "21")
+        maximum = values.get("application.java.max")
+        candidates = ([str(Path(self.java_home) / ("bin/java.exe" if os.name == "nt" else "bin/java"))]
+                      if self.java_home else _candidate_paths('java'))
+        java_result = {"error": "Java 미설치", "stderr": "", "stdout": "", "returncode": None}
+        major = None
+        for java in candidates:
+            path = Path(java)
+            if not self.java_home and (not path.is_file() or not path.with_name(
+                    'javac.exe' if os.name == 'nt' else 'javac').is_file()):
+                continue
+            java_result = await run_process([java, "-version"], timeout=10)
+            major = _java_major(java_result.get("stderr", "") + java_result.get("stdout", ""))
+            if (_ok(java_result) and major is not None and major >= required
+                    and (not maximum or major <= int(maximum))):
+                self.java_home = str(path.parent.parent)
+                break
         result = {
             "home": str(self.home) if self.home else None,
             "ready": False,
@@ -707,16 +741,7 @@ class GhidraAdapter:
                 "유효한 Ghidra Headless 설치 경로를 찾지 못했습니다. 환경 변수 경로가 존재하는지 확인하세요."
             )
             return result
-        props = self.home / "Ghidra/application.properties"
-        values = {}
-        if props.is_file():
-            for line in props.read_text(encoding="utf-8").splitlines():
-                if "=" in line and not line.lstrip().startswith("#"):
-                    key, value = line.split("=", 1)
-                    values[key.strip()] = value.strip()
         result.update(version=values.get("application.version"), properties=values)
-        required = int(values.get("application.java.min", "21") or "21")
-        maximum = values.get("application.java.max")
         result["java_required_min"] = required
         launcher = (
             self.home
@@ -726,6 +751,7 @@ class GhidraAdapter:
         result["launcher"] = str(launcher)
         result["ready"] = (
             launcher.is_file()
+            and _ok(java_result)
             and major is not None
             and major >= required
             and (not maximum or major <= int(maximum))

@@ -9,6 +9,7 @@ import struct
 import threading
 import warnings
 import zipfile
+import zlib
 
 import pytest
 
@@ -269,3 +270,192 @@ def test_invalid_deflate_stream_is_a_safe_failure_not_an_uncaught_decoder_error(
     path.write_bytes(data)
     report = package_api().inventory_package(path)
     assert report['status'] == 'failed' and report['code'] == 'package_invalid'
+
+
+@pytest.mark.parametrize('name', [
+    'stored_size_contradiction.zip', 'deflate_size_contradiction.zip',
+    'stored_zero_contradiction.zip', 'local_header_size_mismatch.zip',
+])
+def test_retained_contradictory_payloads_cannot_become_equal_inventories(name):
+    path = Path(__file__).parent / 'fixtures' / 'package-integrity' / name
+    result = package_api().compare_packages(path, path)
+    assert result['status'] == 'failed'
+    assert result['code'] == 'package_invalid'
+    assert result['original']['complete'] is False
+    assert result['comparison'] is None
+
+
+def wire_archive(payload=b'payload', *, method=8, descriptor=True, signed=True,
+                 compressed=None, local_values=None, descriptor_values=None):
+    """A single-entry ZIP with independent raw header/descriptor control."""
+    name = b'abc'
+    if compressed is None:
+        compressed = (zlib.compress(payload)[2:-4] if method == 8 else payload)
+    values = (zlib.crc32(payload), len(compressed), len(payload))
+    flags = 8 if descriptor else 0
+    local_values = local_values if local_values is not None else (
+        (0, 0, 0) if descriptor else values)
+    local = struct.pack('<4s5H3I2H', b'PK\x03\x04', 20, flags, method, 0, 0,
+                        *local_values, len(name), 0) + name
+    trailer = b''
+    if descriptor:
+        trailer = (b'PK\x07\x08' if signed else b'') + struct.pack(
+            '<3I', *(descriptor_values if descriptor_values is not None else values))
+    central = struct.pack('<4s6H3I5H2I', b'PK\x01\x02', 20, 20, flags, method, 0, 0,
+                          *values, len(name), 0, 0, 0, 0, 0, 0) + name
+    end = struct.pack('<4s4H2IH', b'PK\x05\x06', 0, 0, 1, 1, len(central),
+                      len(local) + len(compressed) + len(trailer), 0)
+    return local + compressed + trailer + central + end
+
+
+@pytest.mark.parametrize('method', [0, 8])
+@pytest.mark.parametrize('signed', [False, True])
+@pytest.mark.parametrize('payload', [b'', b'payload'])
+def test_standard_data_descriptors_preserve_actual_content(tmp_path, method, signed, payload):
+    path = tmp_path / 'descriptor.zip'
+    path.write_bytes(wire_archive(payload, method=method, signed=signed))
+    result = package_api().inventory_package(path)
+    assert result['status'] == 'success' and result['complete'] is True
+    assert result['members'] == [dict(path='abc', kind='file', size=len(payload),
+                                      sha256=hashlib.sha256(payload).hexdigest())]
+
+
+@pytest.mark.parametrize('kind', ['crc', 'compressed-size', 'size', 'missing'])
+def test_data_descriptor_must_match_central_and_observed_payload(tmp_path, kind):
+    data = bytearray(wire_archive())
+    descriptor = data.index(b'PK\x07\x08')
+    if kind == 'missing':
+        # Preserve the central-directory location while removing its descriptor.
+        del data[descriptor:descriptor + 16]
+        end = data.index(b'PK\x05\x06')
+        struct.pack_into('<I', data, end + 16, descriptor)
+    else:
+        offset = {'crc': 4, 'compressed-size': 8, 'size': 12}[kind]
+        struct.pack_into('<I', data, descriptor + offset, 123)
+    path = tmp_path / 'bad-descriptor.zip'
+    path.write_bytes(data)
+    result = package_api().compare_packages(path, path)
+    assert result['status'] == 'failed' and result['code'] == 'package_invalid'
+    assert result['original']['complete'] is False and result['comparison'] is None
+
+
+@pytest.mark.parametrize('kind', ['unfinished', 'trailing-bytes', 'second-stream'])
+def test_deflate_must_end_once_at_the_exact_compressed_boundary(tmp_path, kind):
+    compressed = zlib.compress(b'payload')[2:-4]
+    compressed = {'unfinished': compressed[:-1], 'trailing-bytes': compressed + b'junk',
+                  'second-stream': compressed + compressed}[kind]
+    path = tmp_path / 'bad-stream.zip'
+    path.write_bytes(wire_archive(compressed=compressed, descriptor=False))
+    result = package_api().compare_packages(path, path)
+    assert result['status'] == 'failed' and result['code'] == 'package_invalid'
+    assert result['comparison'] is None
+
+
+@pytest.mark.parametrize('offset,value', [(6, 8), (8, 0), (14, 0), (18, 1), (22, 1)])
+def test_local_metadata_must_match_central_without_descriptor(tmp_path, offset, value):
+    data = bytearray(wire_archive(descriptor=False))
+    struct.pack_into('<H' if offset < 10 else '<I', data, offset, value)
+    path = tmp_path / 'contradictory-local.zip'
+    path.write_bytes(data)
+    result = package_api().compare_packages(path, path)
+    assert result['status'] == 'failed' and result['code'] == 'package_invalid'
+    assert result['comparison'] is None
+
+
+def test_member_disk_number_cannot_claim_a_complete_single_volume(tmp_path):
+    data = bytearray(wire_archive(descriptor=False))
+    struct.pack_into('<H', data, data.index(b'PK\x01\x02') + 34, 1)
+    path = tmp_path / 'split-member.zip'
+    path.write_bytes(data)
+    result = package_api().compare_packages(path, path)
+    assert result['status'] == 'failed' and result['code'] == 'package_multidisk'
+    assert result['comparison'] is None
+
+
+def test_deflate_validation_streams_more_than_one_output_chunk(tmp_path):
+    payload = bytes(range(256)) * 500
+    path = tmp_path / 'chunked-deflate.zip'
+    path.write_bytes(wire_archive(payload))
+    result = package_api().inventory_package(path)
+    assert result['status'] == 'success' and result['complete'] is True
+    assert result['total_bytes_read'] == 128000
+    assert result['members'][0]['sha256'] == hashlib.sha256(payload).hexdigest()
+
+
+def test_descriptor_accepts_populated_matching_local_values(tmp_path):
+    compressed = zlib.compress(b'payload')[2:-4]
+    path = tmp_path / 'populated-local.zip'
+    path.write_bytes(wire_archive(local_values=(zlib.crc32(b'payload'),
+                                               len(compressed), 7)))
+    result = package_api().inventory_package(path)
+    assert result['status'] == 'success' and result['complete'] is True
+
+
+def test_forged_small_size_cannot_bypass_actual_decode_limit(tmp_path):
+    data = bytearray(wire_archive(b'a' * 100000, descriptor=False))
+    for signature, offset in ((b'PK\x03\x04', 22), (b'PK\x01\x02', 24)):
+        struct.pack_into('<I', data, data.index(signature) + offset, 1)
+    path = tmp_path / 'forged-bomb.zip'
+    path.write_bytes(data)
+    result = package_api().compare_packages(path, path,
+                                            limits=package_api().PackageLimits(max_member_bytes=2))
+    assert result['status'] == 'failed' and result['code'] == 'package_member_size'
+    assert result['comparison'] is None
+
+
+@pytest.mark.parametrize('length', [65535, 65536, 65537, 131072, 262145])
+@pytest.mark.parametrize('level', [1, 6, 9])
+def test_normal_deflate_can_drain_buffered_output_at_chunk_boundary(tmp_path, length, level):
+    payload = b'a' * length
+    path = tmp_path / 'chunk-boundary.zip'
+    path.write_bytes(wire_archive(payload, compressed=zlib.compress(payload, level)[2:-4]))
+    report = package_api().inventory_package(
+        path, limits=package_api().PackageLimits(max_ratio=1000000))
+    assert report['status'] == 'success' and report['complete'] is True
+    assert report['total_bytes_read'] == length
+    assert report['members'][0]['sha256'] == hashlib.sha256(payload).hexdigest()
+
+
+def test_buffered_final_byte_cannot_exceed_actual_decode_limit(tmp_path):
+    payload = b'a' * 65537
+    data = bytearray(wire_archive(payload, descriptor=False))
+    for signature, crc_offset, size_offset in ((b'PK\x03\x04', 14, 22),
+                                              (b'PK\x01\x02', 16, 24)):
+        start = data.index(signature)
+        struct.pack_into('<I', data, start + crc_offset, zlib.crc32(payload[:-1]))
+        struct.pack_into('<I', data, start + size_offset, 65536)
+    path = tmp_path / 'buffered-overflow.zip'
+    path.write_bytes(data)
+    report = package_api().compare_packages(path, path, limits=package_api().PackageLimits(
+        max_member_bytes=65536, max_ratio=1000000))
+    assert report['status'] == 'failed' and report['code'] == 'package_member_size'
+    assert report['comparison'] is None
+
+
+def test_cancel_between_bounded_decode_chunks_keeps_inventory_incomplete(tmp_path, monkeypatch):
+    payload = b'a' * 65537
+    path = tmp_path / 'cancel-buffered.zip'
+    path.write_bytes(wire_archive(payload))
+    cancel = threading.Event()
+    original = zlib.decompressobj
+
+    class CancelAfterActualOutput:
+        def __init__(self, *args, **kwargs):
+            self.decoder = original(*args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self.decoder, name)
+
+        def decompress(self, *args):
+            output = self.decoder.decompress(*args)
+            # zlib versions consume the final input bytes differently. Cancel
+            # after actual output, independently of its internal tail/EOF shape.
+            if output:
+                cancel.set()
+            return output
+
+    monkeypatch.setattr(zlib, 'decompressobj', CancelAfterActualOutput)
+    report = package_api().compare_packages(path, path, cancel=cancel,
+                                            limits=package_api().PackageLimits(max_ratio=1000000))
+    assert report['status'] == 'cancelled' and report['code'] == 'cancelled'
+    assert report['original']['complete'] is False and report['comparison'] is None

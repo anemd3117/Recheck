@@ -13,6 +13,8 @@ Run from the source root:
 
 ELF compilation uses a local Docker compiler image; target execution uses Recheck's `ManagedExecutionAdapter` and the packaged immutable Linux execution image. PE x64 compilation uses installed MinGW when available; a PE build is not a claim of Windows execution support. The harness records missing tools and images as blockers.
 
+PE C and C++ artifacts require `x86_64-w64-mingw32-gcc` and `x86_64-w64-mingw32-g++`, respectively. Missing compilers are recorded as unavailable per language; the host `g++` is never substituted for a PE compiler. Each emitted PE artifact must pass the native x64 console header check before its identity is recorded.
+
 Left-side observations are collected once per case and reused across comparison types, explicitly recorded in the receipt. Right-side identical binaries are executed separately. Accuracy rows retain every registered case; blocked and interrupted cases do not enter the measured denominator. This harness tests the real adapter and comparison function; it does not claim GUI or whole-engine workflow coverage.
 
 Mutations: arithmetic adds one only at zero; branch changes <=100 to <100; loop changes inclusive accumulation to exclusive; strings counts empty input as one byte; statistics adds one to sum when the two smallest values repeat; io omits the argument delta. UTF-8 string length is byte length, not Unicode character count.
