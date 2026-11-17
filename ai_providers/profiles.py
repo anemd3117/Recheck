@@ -952,7 +952,7 @@ class ProfileManager:
             timeout=profile.options.timeout_seconds,
         )
 
-    async def login(self, profile_id, options=None, cancel=None, on_event=None):
+    async def login(self, profile_id, options=None, cancel=None, on_event=None, on_url=None):
         if options is not None and not isinstance(options, dict):
             raise ProviderError('oauth_configuration', 'OAuth 등록 정보 형식을 확인하세요')
         options = dict(options or {})
@@ -981,7 +981,7 @@ class ProfileManager:
                 on_event,
                 {'kind': 'oauth_login', 'profile_id': profile_id, 'status': 'browser_requested'},
             )
-            result = await self.oauth_service.login(provider, profile_id, config, cancel=cancel)
+            result = await self.oauth_service.login(provider, profile_id, config, cancel=cancel, on_url=on_url)
             token_ref = result.get('credential_ref')
             if not token_ref or token_ref == profile.credential_ref:
                 raise ProviderError(

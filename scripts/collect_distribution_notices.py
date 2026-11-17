@@ -20,27 +20,40 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / 'resources/distribution/notice-sources.json'
 DEFAULT_CACHE = ROOT / 'verification/portable-prerequisites-20261116/packaging/source-cache'
-REVIEWED_QT_LIBRARIES = frozenset(('qt6core.dll', 'qt6gui.dll', 'qt6widgets.dll', 'qt6svg.dll'))
+REVIEWED_QT_LIBRARIES = frozenset((
+    'qt6core.dll', 'qt6gui.dll', 'qt6widgets.dll', 'qt6svg.dll',
+    'qt6webenginecore.dll', 'qt6webenginewidgets.dll', 'qt6webenginequick.dll',
+    'qt6webenginequickdelegatesqml.dll',
+    'qt6webchannel.dll', 'qt6webchannelquick.dll',
+    'qt6printsupport.dll', 'qt6quickwidgets.dll',
+    'qt6network.dll', 'qt6qml.dll', 'qt6qmlmodels.dll', 'qt6qmlmeta.dll',
+    'qt6qmlworkerscript.dll', 'qt6quick.dll',
+    'qt6opengl.dll', 'qt6openglwidgets.dll',
+    'qt6positioning.dll', 'qt6positioningquick.dll',
+))
 REVIEWED_QT_PLUGINS = frozenset((
     'platforms/qwindows.dll', 'platforms/qoffscreen.dll', 'platforms/qminimal.dll',
     'styles/qmodernwindowsstyle.dll', 'iconengines/qsvgicon.dll',
     'imageformats/qsvg.dll', 'imageformats/qgif.dll', 'imageformats/qico.dll',
-    'imageformats/qjpeg.dll',
+    'imageformats/qjpeg.dll', 'tls/qopensslbackend.dll', 'tls/qcertonlybackend.dll',
+    'webview/qtwebview_webengine.dll',
 ))
 
 
 def reviewed_qt_binary(filename):
-    """Keep Qt scope within qtbase/qtsvg and avoid incidental host TLS libraries."""
+    """Keep Qt scope within reviewed libraries including WebEngine and base."""
     filename = str(filename).replace('\\', '/').casefold()
     basename = filename.rsplit('/', 1)[-1]
-    if basename in ('opengl32sw.dll', 'qtnetwork.pyd'):
+    if basename == 'opengl32sw.dll':
         return False
     if basename.startswith('qt6') and basename.endswith('.dll'):
         return basename in REVIEWED_QT_LIBRARIES
     if filename.startswith('pyside6/plugins/'):
         return filename.removeprefix('pyside6/plugins/') in REVIEWED_QT_PLUGINS
+    if 'qtwebengine' in filename or basename == 'qtwebengineprocess.exe':
+        return True
     if filename.startswith('pyside6/translations/'):
-        return False
+        return 'qtwebengine' in filename
     return True
 
 
