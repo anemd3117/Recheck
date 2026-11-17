@@ -63,37 +63,40 @@ def preset_profile(preset_id):
     )
 
 
-def chatgpt_connection_state(manager, profile_id=None):
-    """Read saved account/proof state; never prepare, select or mutate a profile.
+def connection_state(manager, profile_id):
+    """Read one saved connection without network, selection or settings writes.
 
-    A saved proof describes a previously verified response, not a live request.
-    Expired access tokens remain saved connections; the normal request path owns
-    refresh. Multiple accounts require an explicit selection rather than a new
-    profile or an arbitrary account choice.
+    Ready means an enabled profile, valid local authentication binding and a
+    persisted proof of an actual basic response. Tool support is independent.
+    Local/no-auth servers still need a bound response proof; no live reachability
+    or free billing tier is inferred. Expired OAuth access is reported separately.
     """
     result = {'status': 'disconnected', 'profile': None, 'account': {}, 'proof': None}
     try:
-        candidates = [p for p in manager.list_profiles()
-                      if p.provider == 'openai' and p.auth_mode == 'chatgpt']
-        by_id = {p.profile_id: p for p in candidates}
-        profile = by_id.get(profile_id) or by_id.get(manager.selected_profile_id())
-        if profile is None:
-            if len(candidates) > 1:
-                return {**result, 'status': 'choose_profile'}
-            profile = candidates[0] if candidates else None
-        if profile is None:
+        if not profile_id:
             return result
+        profile = manager.get_profile(profile_id)
         result['profile'] = profile
-        if not profile.credential_ref:
+        if profile.auth_mode != 'none' and not profile.credential_ref:
             return result
         account = manager.account_status(profile.profile_id)
         result['account'] = account
         result['status'] = 'needs_attention'
-        if not (account.get('authenticated') is True and account.get('inference_authorized') is True):
-            return result
+        if profile.auth_mode in ('chatgpt', 'google_oauth'):
+            if not (account.get('authenticated') is True and account.get('inference_authorized') is True):
+                return result
+        elif profile.auth_mode == 'api_key':
+            # account_status alone reports the reference's presence. The manager
+            # snapshot actually validates protected key origin/kind/version (or
+            # the explicitly configured environment binding) without returning it.
+            _, snapshot = manager._snapshot(profile.profile_id)
+            if (not account.get('credential_saved')
+                    or profile.credential_ref.startswith('env:') and not snapshot[1].get('env_sha256')):
+                return result
         proof = manager.cached_capabilities(profile.profile_id)
         result['proof'] = proof
-        if not profile.enabled or not profile.external_consent or not profile.allowed_evidence:
+        if not profile.enabled or (profile.provider != 'ollama'
+                                   and (not profile.external_consent or not profile.allowed_evidence)):
             result['status'] = 'disabled'
         elif account.get('expired') is True:
             result['status'] = 'expired'
@@ -106,12 +109,39 @@ def chatgpt_connection_state(manager, profile_id=None):
               and proof.get('auth_mode') == profile.auth_mode):
             result['status'] = 'ready'
         else:
-            result['status'] = 'account_saved'
+            result['status'] = 'verification_needed' if profile.auth_mode == 'none' else 'account_saved'
         return result
     except Exception:
         # A missing/corrupt protected record is not a disconnected success. Never
         # expose filesystem, account or provider exception text in the card.
         return {**result, 'status': 'needs_attention'}
+
+
+def ready_connection_profiles(manager):
+    """Return all saved ready profiles, without promoting any selection."""
+    return [profile for profile in manager.list_profiles()
+            if connection_state(manager, profile.profile_id)['status'] == 'ready']
+
+
+def preset_connection_state(manager, preset_id, profile_id=None):
+    """Resolve an explicit/current, selected or unique preset connection."""
+    empty = {'status': 'disconnected', 'profile': None, 'account': {}, 'proof': None}
+    try:
+        candidates = [p for p in manager.list_profiles() if matches_preset(p, preset_id)]
+        by_id = {p.profile_id: p for p in candidates}
+        profile = by_id.get(profile_id) or by_id.get(manager.selected_profile_id())
+        if profile is None:
+            if len(candidates) > 1:
+                return {**empty, 'status': 'choose_profile'}
+            profile = candidates[0] if candidates else None
+        return connection_state(manager, profile.profile_id) if profile else empty
+    except Exception:
+        return {**empty, 'status': 'needs_attention'}
+
+
+def chatgpt_connection_state(manager, profile_id=None):
+    """Compatibility entry point for the existing ChatGPT connection card."""
+    return preset_connection_state(manager, 'chatgpt', profile_id)
 
 
 class APIKeySetup:
@@ -161,7 +191,8 @@ class APIKeySetup:
             and proof.get('auth_mode') == profile.auth_mode
         )
 
-    async def connect(self, profile_id, *, role='analysis', cancel=None, on_event=None):
+    async def connect(self, profile_id, *, role='analysis', cancel=None, on_event=None,
+                      force_probe=False):
         profile = self.manager.get_profile(profile_id)
         if (profile.auth_mode != 'api_key' or not profile.enabled
                 or not profile.external_consent):
@@ -190,7 +221,7 @@ class APIKeySetup:
             profile = self.manager.save_profile({**profile.model_dump(), 'model': chosen})
         await step('response')
         cached = getattr(self.manager, 'cached_capabilities', lambda pid: None)(profile_id)
-        reused = self._ready(cached, profile)
+        reused = not force_probe and self._ready(cached, profile)
         proof = cached if reused else await self.manager.probe_capabilities(
             profile_id, cancel=cancel, on_event=on_event,
         )

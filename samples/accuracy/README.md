@@ -1,26 +1,23 @@
-# Deterministic comparison corpus
+# 고정 정답으로 검사하는 비교 샘플
 
-The six C programs accept bounded values and avoid signed overflow in the registered cases.
-`oracle.json` freezes literal expected UTF-8 stdout, stderr and exit codes before execution or AI review.
-`MUTANT=1` selects one documented semantic change; `ALTERNATE=1` selects an equivalent implementation.
-The evaluation builds O0, O2, alternate, mutant and stripped variants. The identical comparison runs the O0 binary again.
+C 프로그램 6개는 제한된 값을 입력받으며 등록 사례에서 부호 있는 정수의 오버플로를 피한다. `oracle.json`에는 실행·AI 검토 전에 고정한 UTF-8 표준출력·표준오류·종료 코드가 있다. `MUTANT=1`은 문서화한 의미 변경 하나, `ALTERNATE=1`은 같은 결과를 내는 다른 구현을 선택한다. 평가기는 O0·O2·대체 구현·변경 구현·심볼 제거 변형을 빌드한다. 동일 파일 비교는 O0 바이너리를 다시 실행한다.
 
-Run from the source root:
+소스 루트에서 실행한다.
 
 ```powershell
 .venv\Scripts\python scripts\evaluate_accuracy.py --output verification\recheck-next-20261116\accuracy
 ```
 
-ELF compilation uses a local Docker compiler image; target execution uses Recheck's `ManagedExecutionAdapter` and the packaged immutable Linux execution image. PE x64 compilation uses installed MinGW when available; a PE build is not a claim of Windows execution support. The harness records missing tools and images as blockers.
+ELF 컴파일에는 로컬 Docker 컴파일러 이미지를 사용하고, 대상 실행에는 Recheck의 `ManagedExecutionAdapter`와 패키지에 지정된 불변 Linux 실행 이미지를 사용한다. PE x64는 설치된 MinGW가 있을 때 빌드한다. PE 빌드 성공은 Windows 실행 지원을 뜻하지 않는다. 필요한 도구·이미지가 없으면 차단 사유로 기록한다.
 
-PE C and C++ artifacts require `x86_64-w64-mingw32-gcc` and `x86_64-w64-mingw32-g++`, respectively. Missing compilers are recorded as unavailable per language; the host `g++` is never substituted for a PE compiler. Each emitted PE artifact must pass the native x64 console header check before its identity is recorded.
+PE C·C++에는 각각 `x86_64-w64-mingw32-gcc`·`x86_64-w64-mingw32-g++`가 필요하다. 언어별 컴파일러가 없으면 사용할 수 없다고 기록하며 호스트 `g++`로 대신 빌드하지 않는다. 생성한 PE는 네이티브 x64 콘솔 헤더 검사를 통과해야 식별 정보를 기록한다.
 
-Left-side observations are collected once per case and reused across comparison types, explicitly recorded in the receipt. Right-side identical binaries are executed separately. Accuracy rows retain every registered case; blocked and interrupted cases do not enter the measured denominator. This harness tests the real adapter and comparison function; it does not claim GUI or whole-engine workflow coverage.
+원본 관찰은 사례마다 한 번 수집해 비교 유형 사이에서 재사용하고 확인 자료에 이를 명시한다. 동일 파일 비교의 오른쪽 대상은 따로 실행한다. 모든 등록 사례는 평가표에 남기되 차단·중단 사례는 측정 분모에서 제외한다. 이 하네스는 실제 어댑터·비교 함수를 검사하며 GUI나 전체 엔진 흐름까지 검증했다고 표시하지 않는다.
 
-Mutations: arithmetic adds one only at zero; branch changes <=100 to <100; loop changes inclusive accumulation to exclusive; strings counts empty input as one byte; statistics adds one to sum when the two smallest values repeat; io omits the argument delta. UTF-8 string length is byte length, not Unicode character count.
+변경 구현은 다음과 같다. arithmetic은 입력 0에서만 1을 더한다. branch는 `<=100`을 `<100`으로 바꾼다. loop는 마지막 값까지 더하던 반복에서 마지막 값을 제외한다. strings는 빈 입력을 1바이트로 센다. statistics는 가장 작은 두 값이 반복될 때 합계에 1을 더한다. io는 인자로 받은 증분을 적용하지 않는다. UTF-8 문자열 길이는 유니코드 문자 수가 아닌 바이트 수다.
 
-`recovery.c` only exercises bounded-container cleanup for time limit, output limit and a paused child. It never changes system settings or user files.
+`recovery.c`는 시간 제한·출력 제한·멈춘 자식 프로세스의 제한된 컨테이너 정리만 시험한다. 시스템 설정이나 사용자 파일은 변경하지 않는다.
 
-`many_functions.cpp` supplies 129 noinline C++ template instantiations for the decompilation cap. Its defined output is the bounded integer input plus 8256; invalid input prints `invalid integer` to stderr and exits 2. The harness compiles base and stripped ELF/PE variants as static-analysis stress artifacts. These extra artifacts are outside the six-program dynamic accuracy denominator.
+`many_functions.cpp`는 디컴파일 상한을 시험하기 위해 인라인하지 않는 C++ 템플릿 인스턴스 129개를 제공한다. 유효한 제한 정수 입력에는 8256을 더한 값을 출력한다. 잘못된 입력은 표준오류에 `invalid integer`를 쓰고 종료 코드 2를 반환한다. 하네스는 기본·심볼 제거 ELF·PE를 정적분석 부하 샘플로 빌드한다. 이 추가 파일은 위 6개 프로그램의 동적 정확도 분모에 포함하지 않는다.
 
-The oracle has 71 registered inputs, including invalid inputs and UTF-8 byte cases. Across the five comparison types it defines 355 pair verdicts, with exactly 19 expected differences in the mutant cases. Each baseline observation is reused across the five comparisons; the identical right-hand observation is a fresh target execution. A full sweep collects 426 separate target executions.
+정답표에는 잘못된 입력·UTF-8 바이트 사례를 포함한 입력 71개가 등록돼 있다. 비교 유형 5개에 걸친 판정은 355쌍이며 변경 구현의 기대 차이는 정확히 19개다. 기준 관찰은 5개 비교에서 재사용하고 동일 파일 비교의 오른쪽 대상은 새로 실행한다. 전체 평가는 대상 실행을 총 426회 수행한다.

@@ -115,6 +115,7 @@ class ProviderPanel(QWidget):
         self._workers = set()
         self._worker_completions = {}
         self._operation_active = False
+        self._connection_feedback_pending = False
         self._active_cancel = None
         self._cancel_pending = False
         self._external_busy = False
@@ -405,7 +406,7 @@ class ProviderPanel(QWidget):
         self.setup_scroll.setWidget(setup_content)
 
         self.quick_button.clicked.connect(self.quick_connect)
-        self.quick_cancel.clicked.connect(self.cancel_operation)
+        self.quick_cancel.clicked.connect(lambda: self.cancel_or_disconnect('chatgpt'))
         self.details_toggle.toggled.connect(scroll.setVisible)
 
         self.profile_combo.currentIndexChanged.connect(self._profile_selected)
@@ -515,6 +516,18 @@ class ProviderPanel(QWidget):
         box.addWidget(self.onboarding_consent)
         self.onboarding_connect = QPushButton('키 보안 저장하고 실제 응답 확인')
         box.addWidget(self.onboarding_connect)
+        self.onboarding_saved_summary = label('', 'muted')
+        box.addWidget(self.onboarding_saved_summary)
+        key_actions = QHBoxLayout()
+        self.onboarding_verify_button = QPushButton('응답 다시 확인')
+        self.onboarding_key_page_button = QPushButton('새 API 키 발급')
+        self.onboarding_cancel_button = QPushButton('연결 해제')
+        for control in (self.onboarding_verify_button, self.onboarding_key_page_button,
+                        self.onboarding_cancel_button):
+            key_actions.addWidget(control)
+            control.hide()
+        self.onboarding_saved_summary.hide()
+        box.addLayout(key_actions)
         box.addWidget(label(
             'API 연결은 제공자별 요금·이용 한도가 적용됩니다. 연결 검사에는 짧은 요청이 '
             '최대 4회 발생하며, 키 저장이나 웹 로그인만으로 연결 완료를 표시하지 않습니다.', 'muted'))
@@ -535,6 +548,13 @@ class ProviderPanel(QWidget):
         self.onboarding_open.clicked.connect(self.open_selected_provider)
         self.onboarding_connect.clicked.connect(self.connect_selected_preset)
         self.onboarding_key.textEdited.connect(lambda _: self.onboarding_consent.setChecked(False))
+        self.onboarding_key.textChanged.connect(self._update_actions)
+        self.onboarding_verify_button.clicked.connect(
+            lambda: self.verify_saved_preset(self.onboarding_combo.currentData()))
+        self.onboarding_key_page_button.clicked.connect(
+            lambda: self._open_key_page(self.onboarding_combo.currentData()) if not self._blocked() else False)
+        self.onboarding_cancel_button.clicked.connect(
+            lambda: self.cancel_or_disconnect(self.onboarding_combo.currentData()))
         outer.addWidget(card)
 
     def _connection_stage(self, stage, *, key_mode=False):
@@ -543,8 +563,16 @@ class ProviderPanel(QWidget):
         for index, item in enumerate(self.connection_steps):
             prefix = '✓ ' if index < stage or stage == 3 else '● ' if index == stage else '○ '
             item.setText(prefix + names[index])
-        if self._browser_dialog is not None:
+        if self._browser_dialog is not None and stage >= 0:
             self._browser_dialog.set_stage(('로그인 대기', '승인 확인', '응답 검사', '연결 완료')[stage])
+
+    def _refresh_saved_stage(self, preset_id, state):
+        if (self._operation_active or self._external_busy or self._connection_feedback_pending
+                or self.onboarding_combo.currentData() != preset_id):
+            return
+        stage = {'ready': 3, 'account_saved': 2, 'expired': 2,
+                 'disconnected': 0}.get(state['status'], -1)
+        self._connection_stage(stage, key_mode=preset_id != 'chatgpt')
 
     def _get_browser(self):
         if self._browser_dialog is None:
@@ -611,6 +639,7 @@ class ProviderPanel(QWidget):
         from .provider_onboarding import connection_preset
 
         preset = connection_preset(preset_id)
+        self._connection_feedback_pending = False
         self.onboarding_combo.blockSignals(True)
         self.onboarding_combo.setCurrentIndex(self.onboarding_combo.findData(preset_id))
         self.onboarding_combo.blockSignals(False)
@@ -633,8 +662,7 @@ class ProviderPanel(QWidget):
             'Gemini 무료 연결은 아래의 프로젝트·전송 동의와 보안 입력란을 사용하세요.'
             if preset_id == 'gemini' else preset.title + ' 연결을 준비합니다. 기존 기본 AI는 유지합니다.')
         self._connection_stage(0, key_mode=key_mode)
-        if preset_id == 'chatgpt':
-            self.refresh_chatgpt_connection()
+        self.refresh_connection_states()
         if preset_id == 'gemini':
             self.open_gemini_setup()
         if open_browser:
@@ -649,6 +677,9 @@ class ProviderPanel(QWidget):
         preset = connection_preset(self.onboarding_combo.currentData())
         if preset.id == 'chatgpt':
             return self.quick_connect()
+        state = self._preset_state(preset.id)
+        if state['status'] != 'disconnected':
+            return self.show_saved_connection(preset.id, state)
         return self._open_key_page(preset.id)
 
     def _open_key_page(self, preset_id):
@@ -679,6 +710,10 @@ class ProviderPanel(QWidget):
         preset_id = self.onboarding_combo.currentData()
         if preset_id in ('chatgpt', 'gemini'):
             return self.quick_connect() if preset_id == 'chatgpt' else self.open_gemini_setup()
+        if not secret:
+            state = self._preset_state(preset_id)
+            if state['status'] != 'disconnected':
+                return self.show_saved_connection(preset_id, state)
         if not self.onboarding_consent.isChecked():
             self._message('선택한 AI로 분석 근거를 전송하는 데 동의해 주세요.')
             return False
@@ -706,14 +741,7 @@ class ProviderPanel(QWidget):
             secret = ''
 
         def done(result):
-            if result.get('ready') is not True:
-                raise ValueError('response_unverified')
-            self.reload_profiles(result['profile']['profile_id'])
-            self.profile_changed.emit(self.manager.get_profile(result['profile']['profile_id']))
-            self.capabilities_checked.emit(result['capabilities'])
-            self._connection_stage(3, key_mode=True)
-            self._message('연결 완료 · 실제 응답을 확인하고 기본 분석 AI로 저장했습니다.')
-            self.setup_ready.emit(result)
+            self._complete_key_setup(result, preset_id)
 
         self._connection_stage(1, key_mode=True)
         return self._start('API 키 연결과 응답 검사',
@@ -774,6 +802,8 @@ class ProviderPanel(QWidget):
         actions.addWidget(self.gemini_connect_button, 1)
         actions.addWidget(self.gemini_cancel_button)
         layout.addLayout(actions)
+        self.gemini_verify_button = QPushButton('저장한 Gemini 응답 다시 확인')
+        layout.addWidget(self.gemini_verify_button)
         self.gemini_progress = label(
             '키는 현재 Windows 사용자의 DPAPI로 보호합니다. 확인된 응답 이후에만 기본 AI로 선택합니다.',
             'muted',
@@ -783,9 +813,11 @@ class ProviderPanel(QWidget):
         self.gemini_api_key.textEdited.connect(
             lambda _: self.gemini_free_confirm.setChecked(False)
         )
+        self.gemini_api_key.textChanged.connect(self._update_actions)
         self.gemini_help_toggle.toggled.connect(self.gemini_help.setVisible)
         self.gemini_connect_button.clicked.connect(self.connect_gemini)
-        self.gemini_cancel_button.clicked.connect(self.cancel_operation)
+        self.gemini_cancel_button.clicked.connect(lambda: self.cancel_or_disconnect('gemini'))
+        self.gemini_verify_button.clicked.connect(lambda: self.verify_saved_preset('gemini'))
         outer.addWidget(self.gemini_card)
 
     def _gemini_message(self, text):
@@ -815,6 +847,10 @@ class ProviderPanel(QWidget):
         try:
             if self._blocked():
                 return False
+            if not secret:
+                state = self._preset_state('gemini')
+                if state['status'] != 'disconnected':
+                    return self.show_saved_connection('gemini', state)
             if not self.gemini_free_confirm.isChecked():
                 self._gemini_message(
                     '먼저 AI Studio에서 이 키의 프로젝트가 Free tier이고 결제가 연결되지 않았는지 확인해 주세요.'
@@ -860,19 +896,7 @@ class ProviderPanel(QWidget):
             secret = ''
 
         def done(result):
-            if result.get('ready') is not True:
-                self._show_failure('setup_inference', provider='gemini')
-                return
-            self.reload_profiles(result['profile']['profile_id'])
-            self.profile_changed.emit(self.manager.get_profile(result['profile']['profile_id']))
-            self.capabilities_checked.emit(result['capabilities'])
-            self.gemini_summary.setText('연결 완료 · Gemini · ' + result['model'])
-            self._connection_stage(3, key_mode=True)
-            self._gemini_message(
-                'Gemini의 실제 응답을 확인하고 기본 분석 AI로 저장했습니다. '
-                '무료 프로젝트의 한도·요금 등급은 AI Studio에서 계속 확인해 주세요.'
-            )
-            self.setup_ready.emit(result)
+            self._complete_key_setup(result, 'gemini')
 
         return self._start(
             'Gemini 무료 API 연결',
@@ -888,6 +912,7 @@ class ProviderPanel(QWidget):
         self.notice.emit(text)
 
     def _show_failure(self, code, *, provider=None):
+        self._connection_feedback_pending = True
         for item in self.connection_steps:
             if item.text().startswith('● '):
                 item.setText('! ' + item.text()[2:])
@@ -972,6 +997,162 @@ class ProviderPanel(QWidget):
 
         self._message(activity_message(event) or '연결을 준비하고 있습니다.')
 
+    def _preset_state(self, preset_id):
+        from .provider_onboarding import preset_connection_state
+
+        return preset_connection_state(self.manager, preset_id, self._current_id)
+
+    @staticmethod
+    def _saved_connection_text(preset_id, state):
+        names = {'gemini': 'Gemini', 'openai': 'OpenAI API', 'grok': 'Grok',
+                 'deepseek': 'DeepSeek', 'claude': 'Claude', 'chatgpt': 'ChatGPT'}
+        messages = {
+            'ready': '연결 완료 · 저장된 실제 응답 검사 확인됨',
+            'account_saved': '인증 정보 저장됨 · 응답 확인 필요',
+            'verification_needed': '응답 확인 필요',
+            'disconnected': '연결 전 · 개인 키를 입력하고 응답을 확인하세요.',
+            'expired': '인증 정보 저장됨 · 접근 토큰 만료 · 응답 확인이 필요합니다.',
+            'disabled': '연결 사용 또는 근거 전송이 비활성화됐습니다.',
+            'needs_attention': '저장 상태 확인 필요 · 인증 정보와 연결 설정을 확인하세요.',
+            'choose_profile': '연결이 여러 개입니다. 세부 설정에서 사용할 연결을 선택하세요.',
+        }
+        text = names[preset_id] + ' · ' + messages[state['status']]
+        if state['profile'] and state['profile'].model:
+            text += ' · ' + state['profile'].model
+        return text
+
+    def _refresh_disconnect_action(self, button, state):
+        if self._operation_active:
+            button.setText('연결 중단')
+            button.setEnabled(True)
+            button.setToolTip('진행 중인 작업만 중단합니다. 저장된 인증 정보는 삭제하지 않습니다.')
+        else:
+            button.setText('연결 해제')
+            button.setEnabled(not self._external_busy and bool(
+                state['profile'] and state['profile'].credential_ref))
+            button.setToolTip('이 연결의 저장된 인증 정보만 해제합니다. 다른 AI 연결과 선택은 바꾸지 않습니다.')
+
+    def refresh_key_connections(self):
+        busy = self._operation_active or self._external_busy
+        gemini = self._preset_state('gemini')
+        saved = gemini['status'] != 'disconnected'
+        self.gemini_summary.setText(self._saved_connection_text('gemini', gemini))
+        self.gemini_connect_button.setText(
+            '연결 상태 확인' if saved and not self.gemini_api_key.text().strip()
+            else 'Gemini 키 보안 저장하고 응답 확인')
+        self.gemini_connect_button.setAccessibleName('Gemini · ' + self.gemini_connect_button.text())
+        self.gemini_verify_button.setEnabled(not busy and gemini['status'] in ('ready', 'account_saved', 'expired'))
+        self._refresh_disconnect_action(self.gemini_cancel_button, gemini)
+        preset_id = self.onboarding_combo.currentData()
+        key_mode = preset_id != 'chatgpt'
+        for control in (self.onboarding_saved_summary, self.onboarding_verify_button,
+                        self.onboarding_cancel_button):
+            control.setVisible(key_mode)
+        self.onboarding_key_page_button.setVisible(False)
+        if not key_mode:
+            return
+        state = gemini if preset_id == 'gemini' else self._preset_state(preset_id)
+        self._refresh_saved_stage(preset_id, state)
+        saved = state['status'] != 'disconnected'
+        self.onboarding_saved_summary.setText(self._saved_connection_text(preset_id, state))
+        brand = {'openai': 'OpenAI', 'gemini': 'Gemini', 'grok': 'Grok',
+                 'deepseek': 'DeepSeek', 'claude': 'Claude'}[preset_id]
+        self.onboarding_open.setText('연결 상태 확인' if saved else brand + ' API 키 발급')
+        self.onboarding_open.setAccessibleName('선택한 AI · ' + self.onboarding_open.text())
+        self.onboarding_connect.setText(
+            '연결 상태 확인' if saved and not self.onboarding_key.text()
+            else '키 보안 저장하고 실제 응답 확인')
+        self.onboarding_key_page_button.setVisible(saved)
+        self.onboarding_key_page_button.setEnabled(not busy)
+        self.onboarding_verify_button.setEnabled(not busy and state['status'] in ('ready', 'account_saved', 'expired'))
+        self._refresh_disconnect_action(self.onboarding_cancel_button, state)
+
+    def refresh_connection_states(self):
+        self.refresh_chatgpt_connection()
+        self.refresh_key_connections()
+
+    def show_saved_connection(self, preset_id, state=None):
+        state = state or self._preset_state(preset_id)
+        self.refresh_connection_states()
+        text = self._saved_connection_text(preset_id, state)
+        if preset_id == 'gemini':
+            self._gemini_message(text)
+        else:
+            self._message(text)
+        return state['status'] not in ('choose_profile', 'needs_attention', 'disconnected')
+
+    def cancel_or_disconnect(self, preset_id):
+        if self._operation_active:
+            self.cancel_operation()
+            return True
+        if self._blocked():
+            return False
+        state = self._preset_state(preset_id)
+        profile = state['profile']
+        if profile is None or not profile.credential_ref:
+            return False
+        if profile.auth_mode in ('chatgpt', 'google_oauth'):
+            self.reload_profiles(profile.profile_id)
+            return self.logout()
+        try:
+            updated = self.manager.delete_secret(profile.profile_id)
+            if self._current_id == profile.profile_id:
+                self.reload_profiles(profile.profile_id)
+            self.profile_changed.emit(updated)
+            self.refresh_connection_states()
+            self._message('연결 해제 · 이 연결의 저장된 API 키를 삭제했습니다. 다른 AI 선택은 바꾸지 않았습니다.')
+            return True
+        except Exception as exc:
+            self._safe_failure(exc)
+            self.refresh_connection_states()
+            return False
+
+    def verify_saved_preset(self, preset_id):
+        if self._blocked():
+            return False
+        if preset_id == 'chatgpt':
+            return self.verify_chatgpt_connection()
+        state = self._preset_state(preset_id)
+        if state['status'] not in ('ready', 'account_saved', 'expired'):
+            return self.show_saved_connection(preset_id, state)
+        if preset_id == 'gemini':
+            from .gemini_setup import GeminiSetup
+
+            setup = GeminiSetup(self.manager)
+        else:
+            from .provider_onboarding import APIKeySetup
+
+            setup = APIKeySetup(self.manager)
+        self.reload_profiles(state['profile'].profile_id)
+
+        def done(result):
+            self._complete_key_setup(result, preset_id)
+
+        return self._start('저장한 AI 응답 확인',
+                           lambda pid, cancel, emit: setup.connect(
+                               pid, cancel=cancel, on_event=emit, force_probe=True),
+                           done, failure_provider='gemini' if preset_id == 'gemini' else 'api_key',
+                           save_profile=False)
+
+    def _complete_key_setup(self, result, preset_id):
+        from ai_providers.contracts import ProviderError, ProviderProfile
+        from .provider_onboarding import connection_state
+
+        if result.get('ready') is not True:
+            raise ProviderError('setup_inference', '저장된 실제 응답 검사를 확인하지 못했습니다.')
+        returned = ProviderProfile.model_validate(result['profile'])
+        current = connection_state(self.manager, returned.profile_id)
+        if (current['status'] != 'ready'
+                or current['profile'].fingerprint() != returned.fingerprint()
+                or self.manager.selected_profile_id() != returned.profile_id):
+            raise ProviderError('profile_stale', '저장된 연결과 응답 확인 상태가 변경됐습니다.')
+        self.reload_profiles(returned.profile_id)
+        self.profile_changed.emit(current['profile'])
+        self.capabilities_checked.emit(current['proof'])
+        self.show_saved_connection(preset_id, current)
+        self._connection_stage(3, key_mode=True)
+        self.setup_ready.emit({**result, 'capabilities': current['proof']})
+
     def refresh_chatgpt_connection(self):
         from .provider_onboarding import chatgpt_connection_state
 
@@ -992,6 +1173,12 @@ class ProviderPanel(QWidget):
             text += ' · ' + ('GPT-6.1 Sol' if profile.model == RECOMMENDED_MODEL else profile.model)
         self.quick_summary.setText(text)
         self.chatgpt_saved_summary.setText(text)
+        if not (self._operation_active or self._external_busy or self._connection_feedback_pending):
+            self.quick_progress.setText(
+                '이 버튼을 누른 뒤 브라우저에서 계정과 사용 권한을 승인해 주세요.'
+                if status == 'disconnected' else
+                '저장된 연결 상태만 확인합니다. 새 응답 검사는 AI 계정 연결의 응답 확인을 사용하세요.')
+        self._refresh_saved_stage('chatgpt', state)
         if profile and profile.profile_id == self._current_id and state['account']:
             self._show_account(state['account'])
         self.quick_button.setText('ChatGPT 로그인' if status == 'disconnected' else '연결 상태 확인')
@@ -1001,9 +1188,11 @@ class ProviderPanel(QWidget):
             self.onboarding_open.setAccessibleName('선택한 AI · ' + self.onboarding_open.text())
         busy = self._operation_active or self._external_busy
         saved = bool(profile and profile.credential_ref)
+        self._refresh_disconnect_action(self.quick_cancel, state)
         self.chatgpt_verify_button.setEnabled(not busy and status in ('ready', 'account_saved', 'expired'))
         self.chatgpt_relogin_button.setEnabled(not busy and profile is not None)
         self.chatgpt_logout_button.setEnabled(not busy and saved)
+        self.chatgpt_logout_button.setText('연결 해제')
         self.chatgpt_continue_button.setEnabled(not busy and status == 'ready'
                                               and self.manager.selected_profile_id() == profile.profile_id)
         return state
@@ -1026,7 +1215,7 @@ class ProviderPanel(QWidget):
         if state['status'] not in ('ready', 'account_saved', 'expired'):
             self._message(self.quick_summary.text())
             return False
-        return self._connect_chatgpt(existing=state['profile'])
+        return self._connect_chatgpt(existing=state['profile'], force_probe=True)
 
     def relogin_chatgpt(self, *_):
         if self._blocked():
@@ -1046,7 +1235,7 @@ class ProviderPanel(QWidget):
         self.reload_profiles(state['profile'].profile_id)
         return self.logout()
 
-    def _connect_chatgpt(self, *, existing=None, reauthenticate=False):
+    def _connect_chatgpt(self, *, existing=None, reauthenticate=False, force_probe=False):
         from .setup_flow import ChatGPTSetup
 
         setup = ChatGPTSetup(self.manager)
@@ -1088,6 +1277,8 @@ class ProviderPanel(QWidget):
             options = {'on_url': on_url} if on_url is not None else {}
             if reauthenticate:
                 await self.manager.login(pid, cancel=cancel, on_event=emit, **options)
+            if force_probe:
+                options['force_probe'] = True
             return await setup.connect(pid, cancel=cancel, on_event=emit, **options)
 
         self._connection_stage(0)
@@ -1191,11 +1382,7 @@ class ProviderPanel(QWidget):
         except Exception:
             # Failure to read a protected result leaves the connection unverified.
             pass
-        self.refresh_chatgpt_connection()
-        if data.get('provider') == 'gemini' and data.get('credential_ref'):
-            self.gemini_summary.setText(
-                'Gemini 키 보안 저장됨 · ' + (data.get('model') or '무료 후보 모델 확인 필요')
-            )
+        self.refresh_connection_states()
 
     def _set_auth_options(self, auth_mode=None):
         self.auth_combo.blockSignals(True)
@@ -1353,7 +1540,7 @@ class ProviderPanel(QWidget):
         for control in (self.onboarding_combo, self.onboarding_open, self.onboarding_key,
                         self.onboarding_consent, self.onboarding_connect, self.embedded_login_check):
             control.setEnabled(not busy)
-        self.refresh_chatgpt_connection()
+        self.refresh_connection_states()
 
     def set_busy(self, busy):
         """root의 공용 분석/벤치마크 작업 슬롯과 연결한다."""
@@ -1515,6 +1702,7 @@ class ProviderPanel(QWidget):
             # A console has no OAuth attempt ID. End it before binding a worker.
             self._browser_dialog.shutdown()
         self._operation_active = True
+        self._connection_feedback_pending = True
         self._cancel_pending = False
         self._update_actions()
         self.busy_changed.emit(True)
@@ -1606,17 +1794,19 @@ class ProviderPanel(QWidget):
                 return
             try:
                 complete(envelope['result'])
+                self._connection_feedback_pending = False
                 stage = 'complete'
                 journal('success')
             except Exception as exc:
                 journal('failed', getattr(exc, 'code', 'operation_failed'))
                 self._safe_failure(exc)
             finally:
-                self.refresh_chatgpt_connection()
+                self.refresh_connection_states()
 
         if self._launcher:
             if self._launcher(title, work, done) is False:
                 self._operation_active = False
+                self._connection_feedback_pending = False
                 self._operation_id = None
                 self._operation_context = None
                 self._update_actions()

@@ -2,7 +2,7 @@
 
 ## 배포 ZIP으로 실행
 
-1. [0.1.5 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v0.1.5/Recheck-0.1.5-Windows-x64.zip)을 받습니다. [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)에서 해당 배포본의 검증 범위를 확인하세요.
+1. [릴리스 목록](https://github.com/leekmny/Recheck/releases)에서 사용할 버전의 `Recheck-버전-Windows-x64.zip`을 받습니다. 해당 릴리스 설명에서 실행 검증 범위를 확인하세요. [0.1.5 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)는 이전 배포 기록입니다.
 2. ZIP의 압축을 모두 풉니다.
 3. `Recheck` 폴더의 **`Recheck.exe`**를 실행합니다. 같은 위치의 `_internal` 폴더도 함께 유지하세요.
 
@@ -10,9 +10,11 @@
 
 ## AI를 처음 연결하기
 
-새 사용자의 시작 경로는 **Gemini 무료**이며 모델은 Gemini 3.5 Flash-Lite입니다. **Gemini 무료로 시작하기**를 눌러 Google AI Studio에서 자신의 키를 만들고, 프로젝트가 Free tier인지 확인한 뒤 앱의 가려진 키 입력란에 저장합니다. 실제 기본 응답과 JSON 검증을 통과해야 선택한 분석 AI로 사용합니다. 키 발급부터 화면 순서까지 [Gemini 무료 연결 안내](GEMINI_FREE_SETUP.md)를 따르세요. 앱에 개발자 공용 키는 들어 있지 않습니다.
+0.1.5와 0.1.6의 연결 화면은 다릅니다. 사용하는 ZIP의 버전과 해당 릴리스 설명을 먼저 확인하세요. 0.1.6 통합 화면의 사용법과 계정별 검증 범위는 [README](../README.md)와 [인증 상태](AI_AUTH_STATUS.md)를 따릅니다.
 
-GPT는 추천 선택으로 유지합니다. **ChatGPT로 연결하고 자동 설정**을 누르면 본인 계정으로 로그인할 수 있습니다. 기존 설치의 저장된 AI·모델·예산은 업데이트로 교체하지 않습니다.
+Gemini를 무료로 시작하려면 **Gemini 무료로 시작하기**를 눌러 Google AI Studio에서 자신의 키를 만들고, 프로젝트가 Free tier인지 확인한 뒤 앱의 가려진 입력란에 저장합니다. 기본 모델은 Gemini 3.5 Flash-Lite입니다. 실제 기본 응답과 JSON 검증을 통과해야 분석 AI로 사용합니다. [Gemini 무료 연결 안내](GEMINI_FREE_SETUP.md)를 따르세요. 앱에 개발자 공용 키는 들어 있지 않습니다.
+
+GPT도 추천 선택으로 제공합니다. 0.1.6에서는 **설정 → 분석 AI 연결 → ChatGPT 로그인**을 사용합니다. 0.1.5의 버튼명은 **ChatGPT로 연결하고 자동 설정**입니다. 외부 앱 사용 권한이 제한되면 지원되는 플랜의 계정이나 다른 AI를 선택하세요. 기존 연결·모델·예산은 업데이트로 교체하지 않습니다. 새 통합 화면에서 연결을 준비한 뒤 **프로그램 비교**에서 이번 분석에 사용할 AI 하나를 고릅니다. [AI 연결 안내](AI_CONNECTIONS.md)를 참고하세요.
 
 ## 분석 모드 선택
 

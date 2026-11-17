@@ -104,6 +104,9 @@ h1, p { word-break: keep-all; overflow-wrap: break-word; }
     line-height: 1.65;
 }
 .next-step::before { content: ""; flex: 0 0 5px; height: 5px; border-radius: 50%; background: #8cafdF; }
+.eligibility { margin: 24px 0 0; padding-top: 22px; border-top: 1px solid #e8eef7; text-align: left; }
+.eligibility h2 { margin: 0; color: #3973c6; font-size: 12px; line-height: 1.65; font-weight: 650; }
+.eligibility p { margin: 8px 0 0; color: #64758d; font-size: 12px; line-height: 1.85; letter-spacing: -0.1px; }
 .footer { margin: 20px 0 0; color: #8b9ab0; font-size: 11px; line-height: 1.6; text-align: center; letter-spacing: 0.3px; }
 @media (max-width: 420px) {
     body { padding: 24px 18px; }
@@ -119,6 +122,14 @@ _STYLE_HASH = base64.b64encode(hashlib.sha256(_STYLE.encode('utf-8')).digest()).
 CALLBACK_CSP = (
     "default-src 'none'; style-src 'sha256-" + _STYLE_HASH
     + "'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
+
+_ELIGIBILITY_NOTE = (
+    '<section class="eligibility" aria-labelledby="eligibility-title">\n'
+    '<h2 id="eligibility-title">ChatGPT 연결 이용 조건</h2>\n'
+    '<p>이 연결에는 ChatGPT 플랜을 외부 앱에서 사용할 수 있는 권한이 필요합니다. '
+    '무료 계정에서 권한 제한 안내가 표시되면, 지원되는 플랜의 계정으로 진행하거나 '
+    '다른 AI를 선택해 주세요.</p>\n</section>\n'
 )
 
 
@@ -140,6 +151,8 @@ def callback_document(received: bool) -> bytes:
         '<p class="eyebrow">' + eyebrow + '</p>\n'
         '<h1 id="result-title">' + title + '</h1>\n'
         '<p class="description">Recheck 앱으로 돌아가 연결 상태를 확인해 주세요.</p>\n'
-        '<p class="next-step">' + note + '</p>\n</section>\n</main>\n'
+        '<p class="next-step">' + note + '</p>\n</section>\n'
+        + (_ELIGIBILITY_NOTE if received else '')
+        + '</main>\n'
         '<p class="footer">Recheck · 계정 연결</p>\n</div>\n</body>\n</html>\n'
     ).encode('utf-8')

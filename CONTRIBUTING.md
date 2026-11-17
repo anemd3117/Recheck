@@ -65,7 +65,7 @@ git push -u origin HEAD
 
 PR은 최종 변경의 문제·결과·이유를 설명합니다. 실행한 검사의 명령과 결과를 남기고, 소스 검사·실제 외부 서비스·frozen Windows EXE·다른 PC 시험을 구분합니다. 실행하지 않은 항목도 적습니다. GUI 변경은 해당 화면을 확인하고, 인증·외부 도구 변경은 관련 경로를 따로 확인합니다. 문서 수정은 내용·링크·현재 코드와의 일치를 검토합니다.
 
-검토와 해당 head SHA의 CI 확인 뒤 병합합니다. 이 로그인 실험은 `experiment/qwebengine-login` 브랜치에 한정하며, 브랜치 업로드가 `main` 병합이나 새 릴리스 배포를 뜻하지 않습니다. 배포 작업은 [GitHub 개발 절차](docs/GITHUB_WORKFLOW.md)와 [배포·복구 안내](docs/DISTRIBUTION_AND_RECOVERY.md)를 따릅니다.
+검토와 해당 head SHA의 CI 확인 뒤 병합합니다. 브랜치 업로드, `main` 병합, 실행 파일 배포는 각각 확인합니다. 병합 후에는 포함 관계를 확인한 작업 브랜치만 정리하고, 미병합 브랜치는 보존합니다. 배포 작업은 [GitHub 개발 절차](docs/GITHUB_WORKFLOW.md)와 [배포·복구 안내](docs/DISTRIBUTION_AND_RECOVERY.md)를 따릅니다.
 
 ## 설계 결정과 작업 기록
 

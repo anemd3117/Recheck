@@ -88,6 +88,10 @@ def ai_error_message(code):
         'model_catalog_empty': '이 계정에서 사용할 수 있는 GPT 모델이 없습니다. ChatGPT의 사용 권한과 이용 한도를 확인해 주세요.',
         'setup_inference': '로그인은 됐지만 GPT 응답을 확인하지 못했습니다. 이용 한도와 인터넷 연결을 확인한 뒤 다시 연결해 주세요.',
         'permission': '이 계정·워크스페이스의 ChatGPT 사용 권한을 확인해 주세요. 허용되지 않으면 다른 계정이나 AI 연결을 선택하세요.',
+        'subscription_sharing_user_not_eligible': (
+            '현재 선택한 계정·워크스페이스 또는 정책에서는 ChatGPT 사용 권한을 허용할 수 없습니다. '
+            '사용할 수 있는 다른 계정·워크스페이스를 선택하거나 다른 AI로 연결하세요.'
+        ),
         'rate_limit': 'AI 이용 한도에 도달했습니다. ChatGPT 사용량을 확인하거나 잠시 후 다시 시도해 주세요.',
         'authentication': '저장한 계정 인증을 확인하지 못했습니다. 다시 로그인해 주세요.',
         'credential_required': '먼저 ChatGPT 계정을 연결하거나 다른 AI의 키를 저장해 주세요.',
@@ -152,7 +156,8 @@ class ChatGPTSetup:
         if cancel is not None and cancel.is_set():
             raise ProviderError('cancelled', '계정 연결을 중단했습니다.')
 
-    async def connect(self, profile_id, *, cancel=None, on_event=None, on_url=None):
+    async def connect(self, profile_id, *, cancel=None, on_event=None, on_url=None,
+                      force_probe=False):
         self._check_cancel(cancel)
         profile = self.manager.get_profile(profile_id)
         if profile.provider != 'openai' or profile.auth_mode != 'chatgpt':
@@ -180,7 +185,7 @@ class ChatGPTSetup:
 
         await step('response')
         cached = getattr(self.manager, 'cached_capabilities', lambda pid: None)(profile_id)
-        reused = bool(
+        reused = not force_probe and bool(
             cached
             and cached.get('profile_fingerprint') == profile.fingerprint()
             and cached.get('model') == chosen
@@ -191,6 +196,16 @@ class ChatGPTSetup:
             if reused
             else await self.manager.probe_capabilities(profile_id, cancel=cancel, on_event=on_event)
         )
+        errors = capabilities.get('errors', [])
+        if isinstance(errors, list) and any(
+            isinstance(error, dict)
+            and error.get('code') == 'subscription_sharing_user_not_eligible'
+            for error in errors
+        ):
+            raise ProviderError(
+                'subscription_sharing_user_not_eligible',
+                ai_error_message('subscription_sharing_user_not_eligible'),
+            )
         if not (
             capabilities.get('basic') is True
             and capabilities.get('actual_inference_verified') is True

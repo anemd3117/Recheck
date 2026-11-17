@@ -1,93 +1,93 @@
-# Recheck Verification4 and Quality Implementation Plan
+# Recheck 검증4·품질 개선 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
+이 문서는 0.1.5 작업 당시의 실행 계획이다. 체크 표시는 작성 시점의 진행 상태를 보존하며, 실제 최종 수정·실행 검증·공개 이력은 [코드 감사 보고서](../../PROJECT_AUDIT_REPORT.md)와 [0.1.5 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)를 따른다. 후속 0.1.6 연결 작업의 상태와 혼동하지 않는다.
 
-**Goal:** Repair verified correctness defects, audit all maintained code, and publish a verified Windows prerelease.
+> **구현 에이전트 안내:** `superpowers:subagent-driven-development` 또는 `superpowers:executing-plans`를 적용해 단계별로 진행한다. 확인란에는 실제 수행한 항목만 표시한다.
 
-**Architecture:** Preserve the existing Python/PySide6 engine, adapters, records and release pipeline. Validate ZIP structures independently, share preflight/discovery boundaries, tolerate historical environmental evidence at rendering boundaries, and add only demonstrated quality improvements.
+**목표:** 확인된 정확성 결함을 수정하고 유지보수 대상 코드 전체를 감사한 뒤 검증된 Windows 미리보기 버전을 배포한다.
 
-**Tech Stack:** Python >=3.11 (local 3.12), PySide6, pytest, Node static workers, Docker, PyInstaller, GitHub Actions.
+**구조:** 기존 Python·PySide6 엔진, 어댑터, 기록과 배포 절차를 유지한다. ZIP 구조를 독립적으로 검증하고 사전 준비 검사·도구 탐색을 공통화한다. 과거 환경 자료의 누락·null은 표시 단계에서 안전하게 처리하며, 근거가 확인된 품질 개선만 추가한다.
 
-**Spec:** docs/superpowers/specs/2026-11-17-verification4-quality-design.md
+**사용 기술:** Python 3.11 이상(초기 로컬 환경 3.12), PySide6, pytest, Node 정적 worker, Docker, PyInstaller, GitHub Actions.
 
-## Global Constraints
+**설계:** [검증4·코드 감사 설계](../specs/2026-11-17-verification4-quality-design.md)
 
-- Preserve user files, credentials, existing runs and original evidence hashes.
-- No force pushes, history rewriting, tag/asset replacement or global integration changes.
-- Keep required CI job name `tests` and explicitly distinguish source, frozen, Docker, GUI, VM and live AI evidence.
-- Local QA remains under ignored `verification/`; public audit is `docs/PROJECT_AUDIT_REPORT.md`.
-- Actual fixes require a failing regression before production edits.
+## 공통 제약
 
-## Review Focus
+- 사용자 파일·인증 자료·기존 분석 기록과 원본 근거의 해시를 보존한다.
+- 강제 push, 이력 재작성, 기존 태그·첨부 교체, 전역 연동 설정 변경을 하지 않는다.
+- 필수 CI job 이름 `tests`를 유지하고 소스·빌드한 실행 파일·Docker·GUI·VM·실제 AI 근거를 구분한다.
+- 로컬 QA는 Git에서 제외하는 `verification/`에 보관하고 공개 감사 요약은 `docs/PROJECT_AUDIT_REPORT.md`에 작성한다.
+- 운영 코드를 수정하기 전에 결함을 재현하는 실패 회귀 검사를 확인한다.
 
-- Descriptor ZIPs and empty entries must remain valid while contradictory sizes, incomplete DEFLATE and trailing compressed bytes are rejected.
-- Historical nested null/nonmapping environment values must render without mutating records or fabricating tool success.
-- CLI preflight failures must not leave an analysis run, but failures after execution starts must retain evidence.
-- Direct selection must not bypass explicit preparation or accidentally build managed images.
-- Frozen reports and release inventory must match the reviewed source and preserve library notices/source obligations.
+## 중점 검토 항목
 
----
+- 데이터 디스크립터를 쓰는 정상 ZIP과 빈 항목을 허용하면서 크기 모순·미완료 DEFLATE·압축 스트림 뒤의 불필요한 바이트는 거절한다.
+- 과거 환경 자료의 중첩 null·객체가 아닌 값을 표시할 때 원본을 바꾸거나 도구 성공을 만들어 내지 않는다.
+- CLI 사전 준비 검사에서 막힌 요청은 분석 기록을 만들지 않는다. 분석 시작 후 실패한 요청은 근거를 남긴다.
+- 직접 설치 경로를 선택했다고 명시적 준비를 건너뛰거나 관리형 이미지를 의도치 않게 빌드하지 않는다.
+- 빌드한 앱의 보고서와 배포 파일 목록은 검토한 소스와 일치해야 하며 라이브러리 고지·소스 제공 조건을 보존한다.
 
-### Task 1: Discovery and baseline
+### 1단계: 현황 조사와 기준 검사
 
-Files: all tracked first-party files; local `verification/audit/`; final report.
+관련 파일: 추적 중인 자체 작성 파일 전체, 로컬 `verification/audit/`, 최종 보고서.
 
-- [x] Read root audit instructions and clone main into requested folder on `audit/verification4-quality`, preserving supplied Markdown.
-- [x] Consolidate all verification4 docs/evidence and relevant verification3 history; inventory source versus generated/vendor artifacts.
-- [x] Run locked-environment full pytest and Node baseline; record tool availability and dependency vulnerabilities.
-- [x] Review design against actual contracts; ledger any necessary corrections.
+- [x] 루트 감사 지시서를 읽고 요청 폴더에 main을 복제해 `audit/verification4-quality`에서 작업한다. 제공된 Markdown은 보존한다.
+- [x] 검증4 문서·근거 전체와 관련 검증3 이력을 대조하고 자체 소스·생성물·외부 구성요소의 목록을 구분한다.
+- [x] 잠금 의존성 환경에서 전체 pytest·Node 기준 검사를 실행하고 도구 가용성과 의존성 취약점을 기록한다.
+- [x] 설계를 실제 계약과 대조하고 필요한 정정 사항을 기록한다.
 
-### Task 2: Strict ZIP integrity
+### 2단계: ZIP 무결성 검증 강화
 
-Files: `recheck/package_comparison.py`, `tests/test_package_comparison.py`, `docs/PACKAGE_COMPARISON.md`.
+관련 파일: `recheck/package_comparison.py`, `tests/test_package_comparison.py`, `docs/PACKAGE_COMPARISON.md`.
 
-Interfaces: preserve `inventory_package(path, *, limits=None, cancel=None)` and `compare_packages(...)` result schema.
+인터페이스: `inventory_package(path, *, limits=None, cancel=None)`과 `compare_packages(...)`의 결과 스키마를 유지한다.
 
-- [x] Add regressions using hand-built/retained contradictory STORED, DEFLATE, zero-length and local-header-size fixtures; assert incomplete and comparison=None.
-- [x] Run these tests and observe expected failures.
-- [x] Validate local/central/descriptor metadata and independent actual compressed stream/CRC/length, bounded by current limits; reject unsupported combinations explicitly.
-- [x] Run all existing package tests and the original package124 independent harness against source; review supported normal cases.
-- [x] Commit only reviewed task files.
+- [x] 직접 만들거나 보존한 STORED·DEFLATE·빈 항목·로컬 헤더 크기 모순 fixture로 회귀 검사를 추가하고 미완료·`comparison=None`을 기대값으로 고정한다.
+- [x] 검사를 실행해 예상한 실패를 확인한다.
+- [x] 로컬 헤더·중앙 디렉터리·디스크립터를 대조하고 압축 스트림 종료·CRC·실제 길이를 기존 자원 상한 안에서 독립 검증한다. 미지원 조합은 명시적으로 거절한다.
+- [x] 기존 패키지 검사 전체와 원래 package124 독립 하네스를 소스에서 실행하고 지원하는 정상 사례를 검토한다.
+- [x] 검토한 작업 파일만 커밋한다.
 
-### Task 3: Historical report resilience
+### 3단계: 과거 보고서의 누락·잘못된 값 처리
 
-Files: `recheck/report.py`, `tests/test_report.py` and related report tests.
+관련 파일: `recheck/report.py`, `tests/test_report.py`와 관련 보고서 검사.
 
-Interfaces: `render_report(run, destination)` must preserve input and existing report contract.
+인터페이스: `render_report(run, destination)`은 입력과 기존 보고서 계약을 보존한다.
 
-- [x] Add nested-null/nonmapping history regressions and observe failure.
-- [x] Normalize optional mappings at read boundaries and present explicit unavailable/unrecorded values; preserve raw evidence.
-- [x] Render retained real Server=null record without changing its hash; run report/review/failure tests.
-- [x] Commit reviewed task files.
+- [x] 과거 자료의 중첩 null·객체가 아닌 값에 대한 회귀 검사를 추가하고 실패를 확인한다.
+- [x] 읽기 단계에서 선택 필드를 정규화하고 사용할 수 없음·미기록을 명시한다. 원시 근거는 보존한다.
+- [x] 보존한 실제 Server=null 기록의 해시를 바꾸지 않고 보고서를 생성한다. 보고서·확인 범위·실패 항목 검사를 실행한다.
+- [x] 검토한 작업 파일을 커밋한다.
 
-### Task 4: Preflight, adapter preparation and discovery consistency
+### 4단계: 사전 준비 검사·어댑터 준비·도구 탐색 일치
 
-Files: `recheck/cli.py`, `recheck/engine.py`, `recheck/analysis_environment.py`, `recheck/prerequisites.py`, `recheck/setup_discovery.py`, adapter/Ollama modules as demonstrated; associated tests.
+관련 파일: `recheck/cli.py`, `recheck/engine.py`, `recheck/analysis_environment.py`, `recheck/prerequisites.py`, `recheck/setup_discovery.py`, 결함이 확인된 어댑터·Ollama 모듈과 관련 검사.
 
-- [x] Trace CLI/GUI start and reproduce all MODE01/MODE02/DIAG observations before fixing.
-- [x] Pin analysis-preflight rejection with no new run for unsupported modes/formats; preserve post-start failed run behavior.
-- [x] Pin direct/managed preparation behavior and shared Java/Ollama discovery with controlled process boundaries.
-- [x] Implement minimal common-boundary fixes and run mode/setup/CLI/adapter tests.
-- [x] Commit reviewed task files.
+- [x] CLI·GUI 시작 흐름을 추적하고 MODE01·MODE02·DIAG 관찰을 수정 전에 재현한다.
+- [x] 미지원 모드·형식의 사전 차단에서 분석 기록이 생성되지 않는지 고정하고, 시작 후 실패의 기록 보존은 유지한다.
+- [x] 직접 설치·관리형 경로의 준비 동작과 공통 Java·Ollama 탐색을 통제된 프로세스 조건에서 확인한다.
+- [x] 공통 경계를 최소한으로 수정하고 모드·설정·CLI·어댑터 검사를 실행한다.
+- [x] 검토한 작업 파일을 커밋한다.
 
-### Task 5: Complete code audit and demonstrated improvements
+### 5단계: 전체 코드 감사와 근거가 있는 개선
 
-Files: first-party modules, scripts, tests, `.github/workflows/`, `pyproject.toml`, locked dependencies, `.gitignore`, final report.
+관련 파일: 자체 모듈·스크립트·테스트, `.github/workflows/`, `pyproject.toml`, 잠금 의존성, `.gitignore`, 최종 보고서.
 
-- [x] Account for actual manual review coverage, static analysis, complexity and duplication; do not claim unread files reviewed.
-- [x] Check SonarQube, CodeQL, OSV-Scanner, OpenSSF Scorecard and Ruff; use justified local alternatives and record unavailable tools.
-- [x] Fix reproducible P0/P1 and useful P2 findings with RED/GREEN regressions. Avoid broad mechanical formatting churn.
-- [x] Add bounded, least-permission automated quality/security checks compatible with current CI and verify configuration/results.
-- [x] Run full pytest/Node, final static/dependency scans and independent code review; fix material findings.
-- [x] Write `docs/PROJECT_AUDIT_REPORT.md` with inventory counts, before/after results, exact limitations and remaining work.
+- [x] 실제 수동 검토 범위와 정적 분석·복잡도·중복 결과를 기록한다. 읽지 않은 파일을 검토했다고 표시하지 않는다.
+- [x] SonarQube·CodeQL·OSV-Scanner·OpenSSF Scorecard·Ruff를 확인한다. 필요한 로컬 대안은 근거와 함께 사용하고 사용할 수 없는 도구도 기록한다.
+- [x] 재현한 P0·P1과 유용한 P2를 실패→수정 후 통과 회귀로 보완한다. 광범위한 자동 포맷 변경은 섞지 않는다.
+- [x] 기존 CI와 호환되는 제한된 품질·보안 검사를 최소 권한으로 추가하고 설정·결과를 확인한다.
+- [x] 전체 pytest·Node, 최종 정적·의존성 검사와 독립 코드 검토를 수행하고 중요한 발견 사항을 수정한다.
+- [x] `docs/PROJECT_AUDIT_REPORT.md`에 파일 수, 변경 전후 결과, 정확한 한계와 남은 작업을 기록한다.
 
-### Task 6: Build, real verification and GitHub publication
+### 6단계: 빌드·실제 검증·GitHub 게시
 
-Files: version metadata, selected docs, source identity, release notes; local build/proof artifacts.
+관련 파일: 버전 정보·선별 문서·소스 식별자·릴리스 노트, 로컬 빌드·검증 자료.
 
-- [x] Choose next unused version (expected 0.1.5), update consistent user-facing/version metadata and prepare exact release notes.
-- [x] Run `scripts/verify_source.py --output verification/builds/<release>/source-checks`, then package with existing notices/source verification.
-- [x] Verify new frozen ZIP regressions, historical report, actual GUI and known Docker behavior oracle using separate app data; retain native proof and inventory.
-- [ ] Commit reviewed source identity; push branch, open PR using established format and verify exact-head CI.
-- [ ] Merge reviewed SHA using repository privacy-preserving workflow; verify main CI, create new draft prerelease, upload immutable ZIP and check server SHA256/size.
-- [ ] Publish and re-read final release page/assets/commit/CI/links. Report exact links and any genuinely unmet conditions.
+- [x] 사용하지 않은 다음 버전(예상 0.1.5)을 정하고 앱·배포 버전 정보를 일치시킨 뒤 정확한 릴리스 설명을 준비한다.
+- [x] `scripts/verify_source.py --output verification/builds/<release>/source-checks`를 실행한 뒤 기존 고지·소스 검증을 적용해 패키징한다.
+- [x] 별도 앱 데이터로 새 실행본의 ZIP 회귀·과거 보고서·실제 GUI·알려진 Docker 정답을 확인하고 실제 실행 검증 자료와 전체 파일 목록을 보존한다.
+- [ ] 검토한 소스 식별자를 커밋하고 브랜치를 올린 뒤 기존 양식으로 PR을 열어 정확한 head의 CI를 확인한다.
+- [ ] 공개 개인정보 보호 절차에 따라 검토한 SHA를 병합한다. main CI, 새 draft prerelease, 변경 불가한 ZIP 업로드와 서버 SHA-256·크기를 확인한다.
+- [ ] 게시 후 최종 릴리스 페이지·첨부·커밋·CI·링크를 다시 읽는다. 정확한 링크와 실제로 충족하지 못한 조건을 보고한다.

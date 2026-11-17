@@ -76,12 +76,25 @@ def test_fresh_authorization_recovery_stage_can_be_saved_without_registration_de
     )
 
 
+def test_exact_plan_eligibility_code_is_preserved_without_erasing_account_readiness(tmp_path):
+    module = journal()
+    module.write_connection_outcome(
+        tmp_path, provider='openai', auth_mode='chatgpt', stage='response', status='failed',
+        code='subscription_sharing_user_not_eligible', account_saved=True,
+    )
+    assert module.read_connection_outcome(tmp_path) == outcome(
+        provider='openai', stage='response', code='subscription_sharing_user_not_eligible',
+        account_saved=True,
+    )
+
+
 @pytest.mark.parametrize('code', [
     'oauth_timeout?token=fixture-private',
     'oauth_network\nfixture-private',
     'Bearer fixture-private',
     'fixture-private@example.invalid',
     'https://auth.openai.com/?code=fixture-private',
+    'subscription_sharing_user_not_eligible?token=fixture-private',
     {'code': 'oauth_timeout', 'message': 'fixture-private'},
 ])
 def test_unknown_or_sensitive_error_is_never_laundered_into_a_stored_code(tmp_path, code):

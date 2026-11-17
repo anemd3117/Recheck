@@ -43,6 +43,7 @@ CONNECTION_ERROR_CODES = frozenset((
     'model_catalog_empty', 'provider_preset', 'free_model_required', 'free_model_unavailable',
     'gemini_profile_required', 'malformed_response', 'permission', 'setup_inference',
     'authentication', 'rate_limit', 'network', 'timeout', 'general_settings_unsaved',
+    'subscription_sharing_user_not_eligible',
 ))
 _LABELS = {
     'provider': CONNECTION_PROVIDERS,

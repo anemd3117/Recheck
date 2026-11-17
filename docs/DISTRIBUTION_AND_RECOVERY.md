@@ -5,11 +5,11 @@
 사용자는 [처음 실행](FIRST_RUN.md), 개발자는 아래의 새 배포본 검증·교체 절차를 따릅니다.
 [공개 범위](PUBLICATION_SCOPE.md)와 [공개 이력 구성](PUBLIC_HISTORY.md)을 함께 따르세요.
 
-이 소스 버전은 **0.1.5**입니다. 실행 파일 경로는 [해당 버전 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)의 `Recheck-0.1.5-Windows-x64.zip`이며 소스 검사와 해당 배포본의 실행 검증 범위를 구분해 확인하세요. 새 설치는 Gemini 3.5 Flash-Lite 무료 연결을 안내하며, 자신의 키 저장과 실제 응답 검증 전에는 연결되지 않습니다. 기존 AI 설정은 보존하고 GPT는 추천 선택으로 제공합니다. [Gemini 설정](GEMINI_FREE_SETUP.md)을 참고하세요.
+이 문서의 소스 버전은 **0.1.6**입니다. 버전별 실행 ZIP과 게시 결과는 [릴리스 목록](https://github.com/leekmny/Recheck/releases)을 확인하세요. [0.1.5 릴리스](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)는 이전 배포 기록입니다. 소스 검사와 각 배포본의 실행 검증 범위는 구분합니다. Gemini 무료 시작과 추천 GPT 연결을 제공하며 인증 저장·실제 응답 검증 전에는 준비 완료로 표시하지 않습니다. 기존 AI 설정은 보존합니다. [AI 연결 안내](AI_CONNECTIONS.md)를 참고하세요.
 
 ## 실행 위치
 
-개발 저장소의 정식 배포 출력은 `dist/Recheck`이며 이 PC의 외부 실행 폴더는 `리체크 배포판 프로토타입`입니다. 두 위치는 검증한 하나의 staging에서 생성하고 EXE·리소스·환경 파일 전체의 크기와 SHA-256이 같아야 합니다. ZIP은 앱 폴더 밖에 둡니다. EXE의 Windows 속성 → 자세히에서 버전을, `_internal/RECHECK_SOURCE_IDENTITY.json`에서 소스 식별자를 확인합니다. 소스 push만으로 기존 EXE는 바뀌지 않습니다.
+개발 저장소의 정식 배포 출력은 `dist/Recheck`입니다. 별도 실행 폴더에도 배포한다면 검증한 같은 staging에서 생성하고 EXE·리소스·환경 파일 전체의 크기와 SHA-256을 대조합니다. ZIP은 앱 폴더 밖에 둡니다. EXE의 Windows 속성 → 자세히에서 버전을, `_internal/RECHECK_SOURCE_IDENTITY.json`에서 소스 식별자를 확인합니다. 소스 push만으로 기존 EXE는 바뀌지 않습니다.
 
 ## 검증 후 배포
 
@@ -24,12 +24,12 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Output verification/
 `scripts/verify_native_release.py --help`의 `--original`, `--changed`, `--tests`, `--expected`로 직접 만든 알려진 차이 예제를 지정합니다. `--expected`는 실행 전에 고정한 입력 순서별 boolean JSON 배열입니다. 필수 `--oracle`은 같은 test_id 순서별 original/reimplementation의 stdout·stderr 문자열과 exit_code를 고정한 JSON 배열입니다. 실제 관측의 원시 UTF-8 바이트와 요청/실측 이미지 ID도 manifest와 대조합니다. 검사는 별도 앱 데이터에서 실제 GUI 시작과 frozen 엔진 동작을 확인하고 `native-proof.json`을 만듭니다. 이 검사는 Windows VM 첫 설치나 임의 Windows 대상 실행을 검증한 것은 아닙니다.
 
 ```powershell
-.venv/Scripts/python scripts/release_distribution.py --stage verification/builds/my-release/package/staged-dist/Recheck --proof verification/builds/my-release/native-proof.json --target dist/Recheck --target ([IO.Path]::GetFullPath("../../리체크 배포판 프로토타입")) --record verification/builds/my-release/publication
+.venv/Scripts/python scripts/release_distribution.py --stage verification/builds/my-release/package/staged-dist/Recheck --proof verification/builds/my-release/native-proof.json --target dist/Recheck --target C:\RecheckDistribution --record verification/builds/my-release/publication
 ```
 
 `..`가 포함된 대상은 절대 경로로 정규화해서 전달합니다. 링크·junction·상위 경로 혼동을 막기 위해 그대로 남은 `..` 경로는 거부합니다. 검사 후 바뀐 파일과 실패한 증거도 거부합니다. 모든 사본과 ZIP을 먼저 검증한 뒤, 이전 폴더 전체를 부모의 `.recheck-previous-<작업ID>`에 보존하고 교체합니다. 사용자 추가 예제·문서·ZIP도 백업에 남으며 새 폴더에 과거 파일을 섞지 않습니다. publication.json에 EXE/ZIP 해시·전체 파일 목록·백업 위치를 기록합니다.
 
-위 외부 대상은 이 PC의 `캡스톤/깃허브/Recheck` 저장소 위치를 기준으로 합니다. 다른 위치에 clone했다면 실제 실행 폴더의 절대 경로를 지정하세요.
+`C:\RecheckDistribution`은 예시입니다. 실제 사용할 전용 실행 폴더의 절대 경로로 바꾸세요.
 
 ## 교체 실패와 강제 종료
 
@@ -61,13 +61,13 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Output verification/
 
 동봉 Linux 컨테이너에서 PE를 실행하거나 첫 실행에서 Windows 이미지를 임의 빌드하지 않습니다. 오류·시간 초과·취소·출력 한도 초과·미지원은 일치나 0점으로 바꾸지 않고 측정 분모에서 제외합니다. 정적 누락·관계 범위·상한은 부분 상태로 남깁니다. 유사도는 휴리스틱이며 유한 입력 일치는 모든 입력의 동등성 증명이 아닙니다.
 
-자동 비교는 먼저 REA 정적 분석을 진행합니다. 실행 지원이 없는 파일은 실행 단계를 차단하고 정적 근거·보고서를 남깁니다. `--mode static`으로 정적 비교만 선택할 수도 있습니다. .NET과 네이티브 코드는 서로 다른 근거이므로 같은 함수 유사도로 섞어 비교하지 않습니다. REA에 다른 APK·Electron·펌웨어 등의 도구가 존재하더라도 이 앱의 비교 스키마에 연결되지 않은 형식까지 지원한다고 표시하지 않습니다.
+실행을 지원하지 않는 파일은 **정적분석**을 직접 선택해 지원 범위의 구조를 확인할 수 있습니다. 선택한 분석에 필요한 도구나 실행 지원이 없으면 새 분석을 시작하기 전에 막으며, 다른 모드로 자동 변경하지 않습니다. .NET과 네이티브 코드는 서로 다른 근거이므로 같은 함수 유사도로 섞어 비교하지 않습니다. REA에 다른 APK·Electron·펌웨어 도구가 존재하더라도 이 앱의 비교 스키마에 연결되지 않은 형식까지 지원한다고 표시하지 않습니다. [분석 모드 안내](ANALYSIS_MODES.md)를 따르세요.
 
 ZIP 구성 비교는 위 프로그램 분석과 별도 모드입니다. 파일을 디스크에 추출하거나 실행하지 않고 AI도 호출하지 않습니다. 두 파일의 전체 수집이 끝나야 추가·삭제·변경·유지를 계산합니다. 손상·미지원·취소·한도 초과는 같다는 결과로 바꾸지 않습니다.
 
 ## 검증 수준
 
-단위 검사, 실제 Docker 실행, frozen EXE 실행, 새 VM 설치는 별개입니다. 조사한 VMware 등록은 Kali 한 개이고 제한된 후보 경로에서 Windows VM을 찾지 못했습니다. Kali는 변경하지 않았습니다. 깨끗한 Windows VM 설치·로그인·오프라인 복원·작은 화면 GUI 및 PE 실행 비교는 미검증입니다. 호스트 Docker 연결로 대신하지 않습니다.
+단위 검사, 실제 Docker 실행, frozen EXE 실행, 새 VM 설치는 별개입니다. 깨끗한 Windows VM의 첫 설치·로그인·오프라인 복원 및 PE 실행 비교는 미검증입니다. 호스트의 실행 성공이나 화면 렌더링 검사가 새 VM 검증을 대신하지 않습니다.
 
 Docker 안의 QEMU Windows VM은 가능한 대안이며 이 PC에서 KVM API·빈 VM 생성은 실측했습니다. Windows 설치 미디어·게스트 부팅·제품 worker·게스트 내부 Docker는 별도 준비와 검증이 필요합니다. [조사 결과와 준비 구성](WINDOWS_DOCKER.md)을 확인하세요.
 

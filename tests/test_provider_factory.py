@@ -419,6 +419,95 @@ async def test_capability_missing_model_is_free():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('failure_at', ['connection', 'http_basic', 'sse_basic'])
+async def test_exact_plan_ineligibility_stops_capability_network_calls_and_preserves_safe_result(failure_at):
+    calls = []
+    code = 'subscription_sharing_user_not_eligible'
+
+    def handler(outgoing):
+        calls.append(outgoing.method)
+        error = {'code': code, 'message': 'fixture-private-plan-error'}
+        if outgoing.method == 'GET' and failure_at != 'connection':
+            return httpx.Response(200, json={'data': [{'id': 'chosen'}]})
+        if failure_at == 'sse_basic':
+            event = {'type': 'response.failed', 'response': {'error': error}}
+            return httpx.Response(
+                200, content=('data: ' + json.dumps(event) + '\n\n').encode('utf-8'),
+                headers={'content-type': 'text/event-stream'},
+            )
+        return httpx.Response(403, json={'error': error})
+
+    p = factory().create_provider(profile(), transport=httpx.MockTransport(handler))
+    try:
+        result = await factory().probe_capabilities(p)
+        assert p.requests_used == 0
+    finally:
+        await p.close()
+    assert calls == (['GET'] if failure_at == 'connection' else ['GET', 'POST'])
+    assert result['budget']['used'] == (0 if failure_at == 'connection' else 1)
+    assert result['errors'] == [{
+        'stage': 'connection' if failure_at == 'connection' else 'basic',
+        'code': code,
+        'message': '해당 기능 검사를 통과하지 못했습니다',
+    }]
+    assert not any(result[key] for key in (
+        'basic', 'json_schema', 'tools', 'tool_roundtrip', 'actual_inference_verified', 'inference_verified',
+    ))
+    assert result['available_modes'] == [] and result['budget']['automatic_retry'] is False
+    assert 'fixture-private-plan-error' not in json.dumps(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('body', [
+    {'error': {'code': 'unknown_permission'}},
+    {'detail': 'subscription_sharing_user_not_eligible'},
+    {'error': {'code': 'invalid_grant'}},
+])
+async def test_other_permission_failures_keep_existing_capability_probe_behavior(body):
+    calls = []
+
+    def handler(outgoing):
+        calls.append(outgoing.method)
+        if outgoing.method == 'GET':
+            return httpx.Response(200, json={'data': [{'id': 'chosen'}]})
+        return httpx.Response(403, json=body)
+
+    p = factory().create_provider(profile(), transport=httpx.MockTransport(handler))
+    try:
+        result = await factory().probe_capabilities(p)
+    finally:
+        await p.close()
+    assert calls == ['GET', 'POST', 'POST', 'POST']
+    assert result['budget']['used'] == 3
+    assert [error['code'] for error in result['errors']] == ['permission'] * 3
+
+
+@pytest.mark.asyncio
+async def test_late_exact_ineligibility_disables_current_probe_readiness_and_stops_tools():
+    class Probe:
+        profile = profile(options=GenerationOptions(max_requests=4, max_output_tokens=256))
+        calls = 0
+
+        async def probe(self, cancel=None):
+            return {'connected': True}
+
+        async def chat(self, request, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                nonce = request.messages[-1].content.split('NONCE=')[-1].split()[0]
+                return ProviderResponse(provider='compatible', auth_mode='none', content=nonce)
+            raise ProviderError('subscription_sharing_user_not_eligible', 'fixture-private-plan-error')
+
+    p = Probe()
+    result = await factory().probe_capabilities(p)
+    assert p.calls == 2 and result['budget']['used'] == 2
+    assert result['errors'][0]['stage'] == 'json_schema'
+    assert not result['basic'] and not result['actual_inference_verified']
+    assert result['available_modes'] == []
+    assert 'fixture-private-plan-error' not in json.dumps(result)
+
+
+@pytest.mark.asyncio
 async def test_build_client_role_snapshot_and_local_legacy_apis(tmp_path):
     from recheck.models import Settings
 

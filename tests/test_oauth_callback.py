@@ -34,7 +34,7 @@ class CallbackDocument(HTMLParser):
         (self.styles if self.in_style else self.text).append(data)
 
 
-async def callback_responses(outcome):
+async def callback_responses(outcome, *, plan_hint='private-plan-hint'):
     """Stop after reading callback responses, before token exchange or storage."""
     cancel = threading.Event()
     responses = []
@@ -58,6 +58,8 @@ async def callback_responses(outcome):
             'email': 'private-person@example.invalid',
             'name': 'private-display-name',
             'profile': 'private-profile',
+            'plan_type': plan_hint,
+            'is_paid': 'private-untrusted-paid-flag',
         }
         if outcome == 'denied':
             params.pop('code')
@@ -132,3 +134,10 @@ def test_loopback_callback_serves_private_self_contained_korean_html(outcome, st
     ))
     if outcome == 'invalid':
         assert responses[1].status_code == 200
+
+
+def test_callback_eligibility_guidance_does_not_trust_plan_query_hints():
+    free = asyncio.run(callback_responses('received', plan_hint='free'))[0]
+    paid = asyncio.run(callback_responses('received', plan_hint='enterprise'))[0]
+    assert free.status_code == paid.status_code == 200
+    assert free.content == paid.content

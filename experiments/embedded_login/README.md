@@ -1,10 +1,10 @@
 # QWebEngineView 내장 로그인 실험
 
-상태: **폐기 가능한 브랜치 실험, 운영 미적용** · 2026-11-17
+상태: **제품 통합 전의 별도 시제품 기록** · 2026-11-17
 
 이 문서는 제품 통합 전의 시제품과 당시 관찰을 보존한다. 현재 0.1.6 통합 구현과 검증 상태는 [연결 사용법](../../docs/AI_CONNECTIONS.md), [ADR-0005](../../docs/decisions/0005-integrated-provider-connections.md), [진행 기록](../../docs/decisions/2026-11-17-embedded-login-work-log.md)을 따른다. 아래 시제품이 Recheck 제품의 진입점은 아니다.
 
-`experiment/qwebengine-login`에서 로그인 화면까지 앱 안에서 진행할 수 있는지 확인한다. 현재 배포된 0.1.5의 시스템 브라우저 인증·설정·패키징은 바꾸지 않는다. 선택의 배경과 대안은 [ADR-0001](../../docs/decisions/0001-embedded-login-experiment.md), 팀원의 개발 절차는 [기여 안내](../../CONTRIBUTING.md)에 있다.
+초기 `experiment/qwebengine-login` 실험에서 로그인 화면까지 앱 안에서 진행할 수 있는지 확인했다. 당시 기준인 0.1.5의 시스템 브라우저 인증·설정·패키징은 변경하지 않았다. 이후 같은 브랜치의 제품 통합과 이 시제품의 관찰을 구분한다. 선택의 배경과 대안은 [ADR-0001](../../docs/decisions/0001-embedded-login-experiment.md), 팀원의 개발 절차는 [기여 안내](../../CONTRIBUTING.md)에 있다.
 
 ## 실행 방법
 
@@ -16,7 +16,7 @@ py -3.14 -m venv verification\embedded-login\.venv
 .\verification\embedded-login\.venv\Scripts\python -m experiments.embedded_login
 ```
 
-Qt 6.12에서는 `PySide6-Addons`만 설치해도 WebEngine이 생기는 것이 아니다. 이 실험은 Qt Project의 별도 패키지 [PySide6-WebEngine 6.12.0.140](https://pypi.org/project/PySide6-WebEngine/6.12.0.140/)을 사용한다. 일반 앱의 고정 의존성과 배포 spec에는 추가하지 않았다.
+Qt 6.12에서는 `PySide6-Addons`만 설치해도 WebEngine이 생기는 것이 아니다. 이 실험은 Qt Project의 별도 패키지 [PySide6-WebEngine 6.12.0.140](https://pypi.org/project/PySide6-WebEngine/6.12.0.140/)을 사용했다. 초기 시제품 단계에서는 일반 앱의 고정 의존성과 배포 spec에 추가하지 않았으며, 이후 통합 단계에서 의존성과 패키징을 별도로 확장했다.
 
 1. **ChatGPT 내장 로그인 시도**를 누르면 기존 OAuth 서비스가 만든 공식 인증 URL을 내장 화면에서 연다.
 2. 실제 계정 시험은 사용자가 직접 로그인·승인한다. 화면이 보이는 것만으로 인증 성공을 판정하지 않는다.
@@ -60,6 +60,8 @@ Qt 6.12에서는 `PySide6-Addons`만 설치해도 WebEngine이 생기는 것이 
 전체 인증 URL·콜백 쿼리·토큰·이메일·웹페이지 본문을 로그에 수집하지 않는다. 사이트 표시에는 origin만 사용한다. 사이트에 JavaScript를 주입해 키·비밀번호를 읽거나 쿠키를 추출하지 않는다. 인증서 검증·브라우저 보안을 끄거나 사용자 에이전트를 위장하지 않는다. 다운로드는 중단한다.
 
 ## 앞으로 확인할 일
+
+아래는 초기 실험을 마칠 때 남긴 후속 항목이다. 제품 통합의 실제 진행·완료 판정은 [통합 작업 기록](../../docs/decisions/2026-11-17-embedded-login-work-log.md)을 따른다.
 
 - 사용자의 직접 조작으로 계정별 로그인·승인·콜백 검증 결과를 확인한다. 성공·실패·미실행을 각각 기록한다.
 - 인증 성공과 API 응답 성공을 분리해 기록한다. 추론 검사는 별도 범위로 다룬다.

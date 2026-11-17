@@ -36,7 +36,7 @@ QWebEngine을 사용하는 폐기 가능한 실험을 별도 브랜치에서 진
 
 ## 영향
 
-실험 결과를 실제 제약과 함께 검토할 수 있다. 반면 Qt WebEngine 구성과 렌더링 검증이 추가로 필요하다. 현재 런타임 의존성은 `PySide6-Essentials`이며, 배포 spec은 WebEngine 모듈을 제외한다. 실험 가능 여부와 현재 배포본에 포함할 수 있는지는 별도 문제다. [의존성 정의](../../pyproject.toml), [배포 spec](../../Recheck.spec)
+실험 결과를 실제 제약과 함께 검토할 수 있다. 반면 Qt WebEngine 구성과 렌더링 검증이 추가로 필요하다. 실험 시작 기준인 0.1.5는 `PySide6-Essentials`를 사용하고 배포 spec에서 WebEngine 모듈을 제외했다. 실험 가능 여부와 당시 배포본에 포함할 수 있는지는 별도 문제였다. [당시 의존성 정의](https://github.com/leekmny/Recheck/blob/v0.1.5/pyproject.toml), [당시 배포 spec](https://github.com/leekmny/Recheck/blob/v0.1.5/Recheck.spec). 이후 0.1.6 통합 변경은 [ADR-0005](0005-integrated-provider-connections.md)를 따른다.
 
 ## 검증 상태와 확인 방법
 

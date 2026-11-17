@@ -228,6 +228,10 @@ class MainWindow(QMainWindow):
         self._auto_prepare_tools = False
         self._advance_to_files = False
         self._provider_capability_summaries = {}
+        self._comparison_profile_id = None
+        self._comparison_choice_initialized = False
+        self._comparison_selection_required = False
+        self._comparison_ready_ids = set()
         self.task_buttons: list[QPushButton] = []
         self.run_result: dict = {}
         self.workflow_result: dict = {}
@@ -712,6 +716,36 @@ class MainWindow(QMainWindow):
         self.ai_explanation.setToolTip('선택한 분석 근거를 AI가 설명합니다. 분석 범위와 별도로 켜거나 끌 수 있습니다.')
         self.ai_explanation.toggled.connect(self.ai_explanation_changed)
         scope_row.addWidget(self.ai_explanation)
+        ai_row = QHBoxLayout()
+        ai_row.addWidget(QLabel('이번 비교에 사용할 AI'))
+        self.comparison_ai = QComboBox()
+        self.comparison_ai.setObjectName('comparisonAISelector')
+        self.comparison_ai.setAccessibleName('이번 비교에 사용할 AI')
+        self.comparison_ai.setAccessibleDescription(
+            '오른쪽 화살표 또는 Alt+아래쪽 화살표로 연결된 AI 목록을 선택합니다.'
+        )
+        from .models import resources_root
+        arrow_path = (QUrl.fromLocalFile(str(resources_root() / 'icons' / 'provider-select.svg'))
+                      .toLocalFile().replace('\\', '/').replace('"', '\\"'))
+        self.comparison_ai.setStyleSheet('''
+            QComboBox#comparisonAISelector { padding-right: 44px; }
+            QComboBox#comparisonAISelector::drop-down {
+                subcontrol-origin: padding; subcontrol-position: top right;
+                width: 32px; border-left: 1px solid #d9e2ef;
+                border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+                background: #f1f5fb;
+            }
+            QComboBox#comparisonAISelector::drop-down:hover { background: #e5eefb; }
+            QComboBox#comparisonAISelector::down-arrow {
+                image: url("''' + arrow_path + '''"); width: 16px; height: 20px;
+            }
+        ''')
+        self.comparison_ai.setToolTip(
+            '연결이 확인된 AI 하나를 선택합니다. 이번 비교에만 적용하며 저장된 기본 AI는 바꾸지 않습니다.'
+        )
+        self.comparison_ai.currentIndexChanged.connect(self.comparison_ai_changed)
+        ai_row.addWidget(self.comparison_ai, 1)
+        scope_box.insertLayout(1, ai_row)
         row.addWidget(QLabel('AI 설명 방식'))
         self.mode = QComboBox()
         self.mode.setAccessibleName('AI 설명 방식')
@@ -1315,14 +1349,71 @@ class MainWindow(QMainWindow):
             self.provider_manager.adopt_committed_settings(self.settings)
             if self.provider_panel._current_id == 'legacy-local':
                 self.provider_panel.reload_profiles('legacy-local')
-            self.provider_panel.refresh_chatgpt_connection()
+            self.provider_panel.refresh_connection_states()
+            self.refresh_selected_provider()
+
+    @staticmethod
+    def settings_for_comparison(settings, profile_id):
+        if not profile_id:
+            return settings
+        return settings.model_copy(deep=True, update={'active_ai_profile': profile_id})
+
+    def refresh_comparison_choices(self):
+        from ai_providers.profiles import resolve_profile
+        from .provider_onboarding import ready_connection_profiles
+
+        ready = ready_connection_profiles(self.provider_manager)
+        self._comparison_ready_ids = {p.profile_id for p in ready}
+        active = resolve_profile(self.settings)
+        if not self._comparison_choice_initialized:
+            if active.profile_id in self._comparison_ready_ids:
+                self._comparison_profile_id = active.profile_id
+                self._comparison_choice_initialized = True
+            elif len(ready) == 1:
+                self._comparison_profile_id = ready[0].profile_id
+                self._comparison_choice_initialized = True
+        selected = self._comparison_profile_id
+        self._comparison_selection_required = bool(ready or selected or active.profile_id != 'legacy-local')
+        previous = self.comparison_ai.blockSignals(True)
+        try:
+            self.comparison_ai.clear()
+            if selected not in self._comparison_ready_ids:
+                self.comparison_ai.addItem(
+                    '이전 AI 연결을 확인하거나 다른 AI를 선택하세요' if selected else
+                    '연결된 AI를 선택하세요' if ready else 'AI 설정에서 연결을 준비하세요', None)
+            labels = {}
+            for p in ready:
+                label = p.name + ' · ' + p.model
+                labels[label] = labels.get(label, 0) + 1
+                suffix = f' ({labels[label]})' if labels[label] > 1 else ''
+                self.comparison_ai.addItem(label + suffix, p.profile_id)
+            if selected in self._comparison_ready_ids:
+                self.comparison_ai.setCurrentIndex(self.comparison_ai.findData(selected))
+        finally:
+            self.comparison_ai.blockSignals(previous)
+        self.comparison_ai.setEnabled(bool(ready) and self.ai_explanation.isChecked()
+                                      and not self._task_join_pending
+                                      and not (self.worker and self.worker.isRunning()))
+
+    def comparison_ai_changed(self, *_):
+        profile_id = self.comparison_ai.currentData()
+        if profile_id in self._comparison_ready_ids:
+            self._comparison_profile_id = profile_id
+            self._comparison_choice_initialized = True
             self.refresh_selected_provider()
 
     def refresh_selected_provider(self):
         from ai_providers.profiles import resolve_profile
 
         try:
-            profile = resolve_profile(self.settings)
+            self.refresh_comparison_choices()
+            if (self._comparison_selection_required
+                    and self._comparison_profile_id not in self._comparison_ready_ids
+                    and (self._comparison_profile_id is not None
+                         or resolve_profile(self.settings).profile_id == 'legacy-local')):
+                raise ValueError('Choose a ready comparison AI')
+            profile = resolve_profile(self.settings_for_comparison(
+                self.settings, self._comparison_profile_id))
             provider_name = {
                 'ollama': 'Ollama',
                 'openai': 'OpenAI',
@@ -1336,17 +1427,14 @@ class MainWindow(QMainWindow):
             if profile.auth_mode == 'chatgpt':
                 provider_name = 'ChatGPT'
             legacy = profile.profile_id == 'legacy-local'
-            cached = self._provider_capability_summaries.get(profile.fingerprint())
-            if not legacy and not cached:
-                cached = self.provider_manager.cached_capabilities(profile.profile_id)
-            if profile.auth_mode == 'chatgpt':
-                from .provider_onboarding import chatgpt_connection_state
+            from .provider_onboarding import connection_state
 
-                saved = chatgpt_connection_state(self.provider_manager, profile.profile_id)
-                cached = saved['proof'] if saved['status'] == 'ready' else None
+            saved = connection_state(self.provider_manager, profile.profile_id)
+            cached = saved['proof'] if saved['status'] == 'ready' else None
             if cached:
                 self.provider_capabilities_done(cached)
-            state = ' · 응답 확인됨' if cached and cached.get('actual_inference_verified') else ''
+            state = (' · 응답 확인됨' if cached and cached.get('actual_inference_verified')
+                     else ' · 연결 확인 필요')
             if not profile.enabled:
                 state = ' · 연결 사용 중지됨'
             self.selected_provider_summary.setText(
@@ -1355,7 +1443,7 @@ class MainWindow(QMainWindow):
             self._ai_ready = bool(
                 cached and cached.get('basic') and cached.get('actual_inference_verified')
             )
-            if legacy:
+            if legacy and not cached:
                 self._ai_ready = bool(
                     self.last_environment.get('ollama', {}).get('connected') and profile.model
                 )
@@ -1364,14 +1452,18 @@ class MainWindow(QMainWindow):
                 provider_name + ' · ' + model_name,
                 'success' if self._ai_ready else 'warning',
             )
-            if not legacy:
-                if not cached:
-                    self.mode.model().item(1).setEnabled(False)
-                    if self.mode.currentData() == 'agent':
-                        self.mode.setCurrentIndex(0)
+            if not cached and (not legacy or self._comparison_choice_initialized):
+                self.mode.model().item(1).setEnabled(False)
+                if self.mode.currentData() == 'agent':
+                    self.mode.setCurrentIndex(0)
         except Exception:
-            self.selected_provider_summary.setText('분석 AI 연결을 확인하세요')
-            legacy = self.settings.active_ai_profile == 'legacy-local'
+            self._ai_ready = False
+            self.mode.model().item(1).setEnabled(False)
+            if self.mode.currentData() == 'agent':
+                self.mode.setCurrentIndex(0)
+            self.selected_provider_summary.setText('이번 비교에 사용할 AI 연결을 선택·확인하세요')
+            self.readiness_cards['ollama'].update_value('연결 확인 필요', '비교용 AI를 선택하세요', 'warning')
+            legacy = False
         self.model_combo.setEnabled(
             legacy and not self._task_join_pending and not (self.worker and self.worker.isRunning())
         )
@@ -1381,7 +1473,8 @@ class MainWindow(QMainWindow):
         from ai_providers.profiles import resolve_profile
 
         try:
-            profile = resolve_profile(self.settings)
+            profile = resolve_profile(self.settings_for_comparison(
+                self.settings, self._comparison_profile_id))
             if (
                 result.get('profile_fingerprint') != profile.fingerprint()
                 or result.get('model') != profile.model
@@ -1654,6 +1747,8 @@ class MainWindow(QMainWindow):
 
     def ai_explanation_changed(self, enabled):
         self.mode.setEnabled(enabled)
+        if hasattr(self, 'provider_manager'):
+            self.refresh_comparison_choices()
         self.refresh_start_guide()
 
     def analysis_scope_changed(self, *_):
@@ -1800,6 +1895,7 @@ class MainWindow(QMainWindow):
         self.analysis_setup.set_busy(True)
         self.analysis_mode.setEnabled(False)
         self.ai_explanation.setEnabled(False)
+        self.comparison_ai.setEnabled(False)
         self.mode.setEnabled(False)
         for control in (*self.setting_fields.values(), self.server_url, self.model_combo):
             control.setEnabled(False)
@@ -2396,6 +2492,11 @@ class MainWindow(QMainWindow):
         tests = [] if scope == 'static' else self.validate_inputs()
         if tests is None:
             return
+        self.refresh_comparison_choices()
+        if (self.ai_explanation.isChecked() and self._comparison_selection_required
+                and self._comparison_profile_id not in self._comparison_ready_ids):
+            self.show_error('이번 비교에 사용할 AI를 선택하세요. 연결을 해제한 AI는 다시 연결·확인해야 합니다.')
+            return
         if not self.persist_settings():
             return
         original, rebuilt = (
@@ -2408,12 +2509,14 @@ class MainWindow(QMainWindow):
         paths = (original, rebuilt)
         suite_id = self._regression_suite_id
         saved_policy = dict(self._regression_policy)
+        comparison_profile_id = self._comparison_profile_id if ai_mode != 'off' else None
         self.stages.clear()
         self.stage_items = {}
         self.agent_view.clear()
         self.stage_section.findChild(QPushButton).setChecked(True)
         async def work(settings, cancel, emit):
             effective = settings.model_copy(update=saved_policy) if suite_id else settings
+            effective = self.settings_for_comparison(effective, comparison_profile_id)
             preflight = await self.analysis_preflight(effective, cancel, emit, scope, paths)
             if cancel.is_set():
                 preflight['cancelled'] = True

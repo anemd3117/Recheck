@@ -232,3 +232,109 @@ def test_invalid_grant_reports_provider_rejection_without_assuming_expiry_or_sto
     assert 'OpenAI가 인증 요청을 받아들이지 않았습니다.' in message
     assert '새 로그인 화면' in message and 'Recheck 연결을 다시 승인' in message
     assert not any(claim in message for claim in ('만료', '저장', '삭제'))
+
+
+def test_exact_plan_ineligibility_offers_account_or_ai_alternatives_without_tier_guessing():
+    message = flow_module().ai_error_message('subscription_sharing_user_not_eligible')
+    assert '계정' in message and '워크스페이스' in message and '정책' in message
+    assert '다른 AI' in message and '다른 계정' in message
+    assert not any(claim in message for claim in (
+        '무료', '유료', '업그레이드', '다시 로그인', '저장', '삭제',
+    ))
+
+
+@pytest.mark.parametrize('verified_flags', [False, True])
+async def test_setup_promotes_exact_structured_plan_ineligibility_without_selecting(verified_flags):
+    module = flow_module()
+    manager = SetupManager(connected=True)
+
+    async def capabilities(pid, **kwargs):
+        manager.calls.append('capabilities')
+        return {
+            'basic': verified_flags, 'actual_inference_verified': verified_flags,
+            'proof_persisted': verified_flags,
+            'errors': [{'stage': 'basic', 'code': 'subscription_sharing_user_not_eligible',
+                        'message': 'fixture-private-plan-error'}],
+        }
+
+    manager.probe_capabilities = capabilities
+    setup = module.ChatGPTSetup(manager)
+    with pytest.raises(ProviderError) as caught:
+        await setup.connect(setup.prepare_profile().profile_id)
+    assert caught.value.code == 'subscription_sharing_user_not_eligible'
+    assert str(caught.value) == module.ai_error_message(caught.value.code)
+    assert 'fixture-private' not in str(caught.value)
+    assert manager.selected == 'legacy-local' and 'login' not in manager.calls
+    assert 'select' not in manager.calls
+
+
+@pytest.mark.parametrize('errors', [
+    ['subscription_sharing_user_not_eligible'],
+    [{'code': 'subscription_sharing_user_not_eligible_suffix'}],
+    [{'message': 'subscription_sharing_user_not_eligible'}],
+    [{'code': 'permission'}],
+    [{'code': 'invalid_grant'}],
+    {'code': 'subscription_sharing_user_not_eligible'},
+])
+async def test_setup_does_not_infer_plan_ineligibility_from_other_probe_errors(errors):
+    module = flow_module()
+    manager = SetupManager(connected=True)
+
+    async def capabilities(pid, **kwargs):
+        return {'basic': False, 'actual_inference_verified': False, 'proof_persisted': False,
+                'errors': errors}
+
+    manager.probe_capabilities = capabilities
+    setup = module.ChatGPTSetup(manager)
+    with pytest.raises(ProviderError) as caught:
+        await setup.connect(setup.prepare_profile().profile_id)
+    assert caught.value.code == 'setup_inference'
+    assert manager.selected == 'legacy-local'
+
+
+async def test_normal_chatgpt_probe_surfaces_plan_permission_error_and_preserves_saved_identity(tmp_path):
+    import httpx
+
+    from ai_providers.factory import create_provider
+    from ai_providers.oauth import OAuthService
+    from ai_providers.profiles import ProfileManager
+    from recheck.models import Settings, atomic_json
+    from test_oauth import ProviderFixture
+
+    module = flow_module()
+    initial = Settings(model='previous-local-model')
+    atomic_json(tmp_path / 'settings.json', initial.model_dump())
+    manager = ProfileManager(initial, root=tmp_path)
+    fixture = ProviderFixture()
+    manager._oauth_service = OAuthService(manager.store, transport=httpx.MockTransport(fixture.handler))
+    calls = []
+
+    def handler(outgoing):
+        calls.append(outgoing.method)
+        if outgoing.method == 'GET':
+            return httpx.Response(200, json={'data': [{'id': module.RECOMMENDED_MODEL}]})
+        return httpx.Response(403, json={'error': {
+            'code': 'subscription_sharing_user_not_eligible', 'message': 'fixture-private-plan-error',
+        }})
+
+    manager.provider_factory = lambda profile: create_provider(
+        profile, root=tmp_path, store=manager.store, oauth_service=manager.oauth_service,
+        transport=httpx.MockTransport(handler),
+    )
+    setup = module.ChatGPTSetup(manager)
+    saved = setup.prepare_profile()
+    await manager.login(saved.profile_id, on_url=fixture.on_url)
+    account_ref = manager.get_profile(saved.profile_id).credential_ref
+
+    async def forbid_browser(url):
+        pytest.fail('An already authenticated account must not restart OAuth for plan ineligibility')
+
+    with pytest.raises(ProviderError) as caught:
+        await setup.connect(saved.profile_id, on_url=forbid_browser)
+    assert caught.value.code == 'subscription_sharing_user_not_eligible'
+    assert str(caught.value) == module.ai_error_message(caught.value.code)
+    assert calls == ['GET', 'GET', 'POST']
+    assert manager.selected_profile_id() == 'legacy-local'
+    assert manager.get_profile(saved.profile_id).credential_ref == account_ref
+    assert manager.account_status(saved.profile_id)['authenticated'] is True
+    assert manager.cached_capabilities(saved.profile_id) is None

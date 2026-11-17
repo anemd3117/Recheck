@@ -318,6 +318,11 @@ async def test_tool_results_preserve_original_call_identity(kind):
     [
         (401, 'authentication', {'error': {'message': 'bad private-test-key'}}),
         (403, 'permission', {'error': {'message': 'forbidden private-test-key'}}),
+        (
+            403,
+            'subscription_sharing_user_not_eligible',
+            {'error': {'code': 'subscription_sharing_user_not_eligible', 'message': 'private-test-key'}},
+        ),
         (429, 'rate_limit', {'error': {'type': 'rate_limit_error'}}),
         (429, 'quota', {'error': {'code': 'insufficient_quota'}}),
         (400, 'context', {'error': {'code': 'context_length_exceeded'}}),
@@ -344,6 +349,28 @@ async def test_http_failures_are_classified_redacted_and_never_silently_retried(
     assert 'private-test-key' not in json.dumps(caught.value.details)
     if status == 429:
         assert caught.value.retry_after == 7
+
+
+@pytest.mark.parametrize('status,body,expected', [
+    (403, {'error': {'code': 'subscription_sharing_user_not_eligible'}},
+     'subscription_sharing_user_not_eligible'),
+    (None, {'code': 'subscription_sharing_user_not_eligible'},
+     'subscription_sharing_user_not_eligible'),
+    (403, {'detail': 'subscription_sharing_user_not_eligible'}, 'permission'),
+    (None, {'detail': 'subscription_sharing_user_not_eligible'}, 'api_error'),
+    (403, {'error': 'subscription_sharing_user_not_eligible'}, 'permission'),
+    (403, {'error': {'message': 'subscription_sharing_user_not_eligible'}}, 'permission'),
+    (403, {'error': {'code': 'subscription_sharing_user_not_eligible_suffix'}}, 'permission'),
+    (403, {'error': {'code': 'SUBSCRIPTION_SHARING_USER_NOT_ELIGIBLE'}}, 'permission'),
+    (403, {'metadata': {'error': {'code': 'subscription_sharing_user_not_eligible'}}}, 'permission'),
+    (403, {'error': {'code': 'invalid_grant'}}, 'permission'),
+    (400, {'error': {'code': 'invalid_grant'}}, 'api_error'),
+    (None, {'code': 'invalid_grant'}, 'api_error'),
+])
+def test_plan_eligibility_classification_requires_the_exact_structured_error_code(status, body, expected):
+    from ai_providers.http_provider import error_code
+
+    assert error_code(status, body) == expected
 
 
 @pytest.mark.asyncio

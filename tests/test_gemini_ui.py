@@ -101,7 +101,12 @@ def test_success_stores_personal_key_securely_and_emits_ready_only_after_verific
         profile = manager.get_profile(pid)
         assert profile.provider == 'gemini' and profile.credential_ref
         capabilities = dict(basic=True, json_schema=True, tools=False,
-                            actual_inference_verified=True, proof_persisted=True)
+                            actual_inference_verified=True, model=profile.model,
+                            provider=profile.provider, profile_fingerprint=profile.fingerprint())
+        # Persist the proof through the real manager; a returned success flag
+        # without a saved/bound proof must no longer make the card ready.
+        _, snapshot = manager._snapshot(pid)
+        capabilities = manager._persist_capabilities(profile, capabilities, snapshot, '')
         profile = manager.select_profile(pid, role='analysis')
         return dict(ready=True, profile=profile.model_dump(), model=profile.model,
                     capabilities=capabilities)
@@ -166,7 +171,8 @@ def test_busy_and_cancel_controls_keep_active_default_and_release_ui(panel, monk
     widget.gemini_cancel_button.click()
     finish(pending)
     assert widget.gemini_connect_button.isEnabled()
-    assert not widget.gemini_cancel_button.isEnabled()
+    assert widget.gemini_cancel_button.isEnabled()
+    assert widget.gemini_cancel_button.text() == '연결 해제'
     assert manager.selected_profile_id() == 'legacy-local'
 
 
@@ -185,6 +191,8 @@ def test_reuses_key_only_for_explicitly_selected_gemini_profile(panel, monkeypat
     monkeypatch.setattr(GeminiSetup, 'connect', fail)
     monkeypatch.setattr(manager, 'save_secret', lambda *a, **k: pytest.fail('stored key replaced'))
     assert widget.connect_gemini()
+    assert pending == [], 'The primary saved-state action must not restart verification'
+    widget.gemini_verify_button.click()
     finish(pending)
     assert widget._current_id == profile.profile_id
     assert manager.selected_profile_id() == 'legacy-local'
