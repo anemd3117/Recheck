@@ -2,6 +2,8 @@
 
 상태: **폐기 가능한 브랜치 실험, 운영 미적용** · 2026-11-17
 
+이 문서는 제품 통합 전의 시제품과 당시 관찰을 보존한다. 현재 0.1.6 통합 구현과 검증 상태는 [연결 사용법](../../docs/AI_CONNECTIONS.md), [ADR-0005](../../docs/decisions/0005-integrated-provider-connections.md), [진행 기록](../../docs/decisions/2026-11-17-embedded-login-work-log.md)을 따른다. 아래 시제품이 Recheck 제품의 진입점은 아니다.
+
 `experiment/qwebengine-login`에서 로그인 화면까지 앱 안에서 진행할 수 있는지 확인한다. 현재 배포된 0.1.5의 시스템 브라우저 인증·설정·패키징은 바꾸지 않는다. 선택의 배경과 대안은 [ADR-0001](../../docs/decisions/0001-embedded-login-experiment.md), 팀원의 개발 절차는 [기여 안내](../../CONTRIBUTING.md)에 있다.
 
 ## 실행 방법

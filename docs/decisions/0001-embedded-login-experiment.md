@@ -1,6 +1,6 @@
 # ADR-0001 · 앱 내부 로그인은 별도 브랜치의 실험으로 한정한다
 
-- 상태: 실험 한정 수락, 운영 적용 미결정
+- 상태: 초기 실험 기록 · 제품 통합 결정은 [ADR-0005](0005-integrated-provider-connections.md)로 대체
 - 날짜: 2026-11-17
 - 적용 범위: `experiment/qwebengine-login` 브랜치, 기준 소스 0.1.5
 

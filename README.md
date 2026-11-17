@@ -1,12 +1,14 @@
 # Recheck
 
-**0.1.5 · Windows x64 초기 개발 버전**
+**0.1.6 개발 브랜치 · Windows x64 미리보기 준비 중**
 
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.
 
 **[0.1.5 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v0.1.5/Recheck-0.1.5-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)
+
+이 브랜치는 Recheck 안의 ChatGPT 로그인과 Gemini·OpenAI·Grok·DeepSeek·Claude 키 발급 안내를 통합합니다. **설정 → 분석 AI 연결**에서 제공자를 선택하세요. 버튼은 수행할 일만 표시하며, ChatGPT 로그인 위치는 체크박스로 선택합니다. 0.1.5 EXE에는 이 기능이 없으며 새 EXE의 검증·배포 상태는 해당 릴리스에서 확인해야 합니다. [연결 사용법과 제한](docs/AI_CONNECTIONS.md), [실제 검증 상태](docs/AI_AUTH_STATUS.md)를 확인하세요.
 
 `0.1.x`는 초기 개발 버전입니다. [이전 이름 대응표](docs/PUBLIC_HISTORY.md#공개-버전-이름-정리)에 공개 버전의 변경을 기록합니다. 소스 검사와 각 Windows 배포본의 실행 검증 범위는 해당 릴리스에서 구분해 확인하세요.
 
@@ -103,6 +105,6 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 자세한 협업·검사·배포 절차는 [GitHub 작업 안내](docs/GITHUB_WORKFLOW.md)를 참고하세요. 중단 지점, REA 기능별 구현 범위와 남은 일은 [프로젝트 상태](docs/PROJECT_STATUS.md)에 정리했습니다.
 
-팀원은 [기여·개발 기록 안내](CONTRIBUTING.md)부터 읽고 작업 브랜치와 PR을 준비하세요. 중요한 선택과 채택·보류한 대안은 [설계 결정 기록(ADR)](docs/decisions/README.md)에 남깁니다. [내장 로그인 실험](experiments/embedded_login/README.md)은 별도 브랜치의 검증용 코드이며 현재 배포 기능에 포함되지 않습니다.
+팀원은 [기여·개발 기록 안내](CONTRIBUTING.md)부터 읽고 작업 브랜치와 PR을 준비하세요. 중요한 선택과 채택·보류한 대안은 [설계 결정 기록(ADR)](docs/decisions/README.md)에 남깁니다. [초기 내장 로그인 실험](experiments/embedded_login/README.md)은 통합 전 관찰 기록이며, 현재 제품 통합은 [연결 설계](docs/superpowers/specs/2026-11-17-embedded-provider-connections-design.md)를 따릅니다.
 
 실행 ZIP은 **Releases**에서 제공합니다. **Packages**는 Docker 이미지·개발용 의존성을 위한 별도 레지스트리이며 현재 사용하지 않습니다. `No packages published`는 실행 ZIP이 없다는 뜻이 아닙니다.

@@ -189,14 +189,39 @@ def test_reuses_key_only_for_explicitly_selected_gemini_profile(panel, monkeypat
     assert manager.selected_profile_id() == 'legacy-local'
 
 
+def test_failed_new_gemini_key_keeps_the_previously_selected_key(panel, monkeypatch):
+    from recheck.gemini_setup import GeminiSetup
+
+    widget, manager, pending, _ = panel
+    old = GeminiSetup(manager).prepare_profile(consent=True)
+    old = manager.save_secret(old.profile_id, 'fixture-working-gemini-key')
+    manager.select_profile(old.profile_id)
+    widget.reload_profiles(old.profile_id)
+
+    async def fail(*args, **kwargs):
+        raise ProviderError('authentication', 'not displayed')
+
+    monkeypatch.setattr(GeminiSetup, 'connect', fail)
+    consent(widget)
+    widget.gemini_api_key.setText('fixture-new-gemini-key')
+    assert widget.connect_gemini()
+    finish(pending)
+    assert manager.selected_profile_id() == old.profile_id
+    assert manager.get_profile(old.profile_id).credential_ref == old.credential_ref
+    assert manager.store.get(old.credential_ref, old.profile_id, old.origin).value.get_secret_value() == 'fixture-working-gemini-key'
+
+
 def test_key_help_opens_only_the_official_key_creation_page(panel, monkeypatch):
+    from types import SimpleNamespace
     from PySide6.QtGui import QDesktopServices
 
     widget, manager, pending, _ = panel
     opened = []
-    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: opened.append(url.toString()) or True)
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: pytest.fail('implicit external browser'))
+    monkeypatch.setattr(widget, '_get_browser', lambda: SimpleNamespace(
+        open_console=lambda provider, url, title: opened.append((provider, url)) or True))
     widget.gemini_key_help.click()
-    assert opened == ['https://aistudio.google.com/api-keys']
+    assert opened == [('gemini', 'https://aistudio.google.com/apikey')]
     assert pending == [] and manager.selected_profile_id() == 'legacy-local'
 
 

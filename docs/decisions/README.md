@@ -4,10 +4,11 @@
 
 | 기록 | 상태 | 핵심 결정 |
 | --- | --- | --- |
-| [0001 · 앱 내부 로그인 실험](0001-embedded-login-experiment.md) | 실험 한정 수락 | 별도 브랜치에서 폐기 가능한 QWebEngine 실험을 진행하며 운영 적용은 결정하지 않음 |
+| [0001 · 앱 내부 로그인 실험](0001-embedded-login-experiment.md) | 0005로 대체 | 초기 폐기 가능한 실험의 배경과 관찰을 보존 |
 | [0002 · 개발용 비밀정보](0002-development-secrets.md) | 현행 유지, `.env` 도입 보류 | 사용자 DPAPI 저장소와 기존 환경 변수 참조를 유지 |
 | [0003 · Windows 배포 구성](0003-windows-bundle-mode.md) | 현행 유지, `onefile` 전환 보류 | 현재 `onedir` 배포·검증·복구 경로를 유지 |
-| [0004 · 제공자별 연결 준비](0004-provider-onboarding.md) | 설계 제안 | GPT·Gemini·Grok·DeepSeek·Claude의 공통 안내 화면과 제공자별 정책·검증 상태를 제안 |
+| [0004 · 제공자별 연결 준비](0004-provider-onboarding.md) | 0005로 구체화 | GPT·Gemini·Grok·DeepSeek·Claude 공통 안내의 초기 제안 |
+| [0005 · 제품 연결 화면 통합](0005-integrated-provider-connections.md) | 구현 중, 배포 확인 대기 | 기존 인증 검증과 선택 가능한 내장 표시·공식 키 콘솔을 제품에 통합 |
 
 ## 팀에서 사용하는 방법
 

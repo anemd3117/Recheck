@@ -1160,6 +1160,7 @@ class MainWindow(QMainWindow):
         self.provider_panel.settings_refreshed.connect(self.refresh_manager_settings)
         self.provider_panel.notice.connect(self.notice)
         self.provider_panel.setup_ready.connect(self.beginner_ai_ready)
+        self.provider_panel.continue_requested.connect(self.follow_next_step)
         self.managed_local_button = QPushButton('내 PC의 AI로 시작 · 처음 약 2.5GB 다운로드')
         self.managed_local_button.setAccessibleName('내장 로컬 AI 자동 준비')
         self.managed_local_button.setToolTip(
@@ -1284,9 +1285,10 @@ class MainWindow(QMainWindow):
 
     def beginner_ai_ready(self, result):
         provider = result.get('profile', {}).get('provider', '')
-        name = 'Gemini' if provider == 'gemini' else 'ChatGPT'
-        self.notice(name + ' 연결 완료. 이어서 필요한 도구를 자동으로 확인합니다.')
-        self.after_current_task(lambda: self.find_setup(auto_apply=True))
+        name = ('ChatGPT' if result.get('profile', {}).get('auth_mode') == 'chatgpt'
+                else {'gemini': 'Gemini', 'openai': 'OpenAI', 'anthropic': 'Claude'}.get(provider, 'AI'))
+        self.refresh_selected_provider()
+        self.notice(name + ' 연결 완료. 연결 정보는 저장됐습니다. 준비되면 다음 단계를 선택하세요.')
 
     def complete_automatic_tools(self):
         if self.setup_result.get('patch') and not self.apply_setup(confirm=False):
@@ -1313,6 +1315,7 @@ class MainWindow(QMainWindow):
             self.provider_manager.adopt_committed_settings(self.settings)
             if self.provider_panel._current_id == 'legacy-local':
                 self.provider_panel.reload_profiles('legacy-local')
+            self.provider_panel.refresh_chatgpt_connection()
             self.refresh_selected_provider()
 
     def refresh_selected_provider(self):
@@ -1336,6 +1339,11 @@ class MainWindow(QMainWindow):
             cached = self._provider_capability_summaries.get(profile.fingerprint())
             if not legacy and not cached:
                 cached = self.provider_manager.cached_capabilities(profile.profile_id)
+            if profile.auth_mode == 'chatgpt':
+                from .provider_onboarding import chatgpt_connection_state
+
+                saved = chatgpt_connection_state(self.provider_manager, profile.profile_id)
+                cached = saved['proof'] if saved['status'] == 'ready' else None
             if cached:
                 self.provider_capabilities_done(cached)
             state = ' · 응답 확인됨' if cached and cached.get('actual_inference_verified') else ''
@@ -1871,6 +1879,8 @@ class MainWindow(QMainWindow):
         self._after_task_action = None
         self._auto_prepare_tools = False
         self._advance_to_files = False
+        if hasattr(self, 'provider_panel'):
+            self.provider_panel.cancel_operation()
         if self.worker and self.worker.isRunning():
             self.worker.cancel_event.set()
             self.cancel_button.setEnabled(False)
@@ -3129,7 +3139,7 @@ class MainWindow(QMainWindow):
             event = {"message": str(event)}
         if event.get('kind') == 'setup_discovery' and event.get('message'):
             self.setup_summary.setText(str(event['message']))
-        if event.get('kind') == 'quick_setup' and hasattr(self, 'provider_panel'):
+        if event.get('kind') in ('quick_setup', 'gemini_setup', 'key_setup', 'oauth_login') and hasattr(self, 'provider_panel'):
             self.provider_panel.show_setup_progress(event)
         if hasattr(self, "performance_panel"):
             self.performance_panel.accept_event(event)
@@ -3183,6 +3193,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._after_task_action = None
         self._auto_prepare_tools = False
+        if hasattr(self, 'provider_panel'):
+            self.provider_panel.cancel_operation()
         if self._task_join_pending or (self.worker and self.worker.isRunning()):
             self.cancel_work()
             self.notice("작업 정리 중입니다. 정리가 끝난 뒤 창을 닫아 주세요.")
@@ -3193,6 +3205,8 @@ class MainWindow(QMainWindow):
                 self.notice("파일 정보 확인 중입니다. 완료 후 창을 닫아 주세요.")
                 event.ignore()
                 return
+        if hasattr(self, 'provider_panel') and self.provider_panel._browser_dialog is not None:
+            self.provider_panel._browser_dialog.shutdown()
         super().closeEvent(event)
 
 
@@ -3639,6 +3653,8 @@ def start_package_verification(app, window, config):
 
 
 def main():
+    if QApplication.instance() is None:
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Recheck")
     app.setApplicationVersion(__version__)

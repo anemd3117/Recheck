@@ -7,8 +7,11 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
 from PySide6.QtWidgets import QApplication
 from shiboken6 import delete
+from ai_providers import profiles
+from ai_providers.contracts import ModelDescriptor
+from recheck.models import Settings
 from recheck.provider_ui import ProviderPanel
-from test_setup_flow import SetupManager
+from test_provider_profiles import MockOAuth
 
 
 @pytest.fixture(scope='module')
@@ -17,8 +20,28 @@ def app():
 
 
 @pytest.fixture
-def beginner_panel(app):
-    manager = SetupManager()
+def beginner_panel(app, tmp_path, monkeypatch):
+    # The ready card must read real protected account/proof records. Replace
+    # only provider I/O; the older SetupManager double never persisted either.
+    class Remote:
+        def __init__(self, profile):
+            self.profile = profile
+
+        async def list_models(self, **kwargs):
+            return [ModelDescriptor(id='gpt-6.1-sol')]
+
+        async def close(self):
+            pass
+
+    async def probe(provider, **kwargs):
+        profile = provider.profile
+        return dict(basic=True, json_schema=True, tools=True, tool_roundtrip=True,
+                    actual_inference_verified=True, model=profile.model,
+                    provider=profile.provider, profile_fingerprint=profile.fingerprint())
+
+    monkeypatch.setattr(profiles, 'probe_provider_capabilities', probe)
+    manager = profiles.ProfileManager(Settings(), root=tmp_path, provider_factory=Remote)
+    manager._oauth_service = MockOAuth(manager.store)
     pending = []
 
     def launch(title, work, done):
@@ -67,8 +90,8 @@ def test_one_click_runs_the_complete_connection_flow_and_updates_the_screen(begi
     result = asyncio.run(work(__import__('threading').Event(), lambda event: None))
     done(result)
     app.processEvents()
-    assert manager.selected != 'legacy-local'
-    assert manager.get_profile(manager.selected).model == 'gpt-6.1-sol'
+    assert manager.selected_profile_id() != 'legacy-local'
+    assert manager.get_profile(manager.selected_profile_id()).model == 'gpt-6.1-sol'
     assert '연결 완료' in widget.quick_summary.text()
     assert not widget._operation_active
 
@@ -83,7 +106,7 @@ def test_chatgpt_login_in_details_also_finishes_model_selection(beginner_panel, 
     work, done = pending.pop()
     done(asyncio.run(work(__import__('threading').Event(), lambda event: None)))
     app.processEvents()
-    assert manager.selected != 'legacy-local', 'Logging in must also activate the working GPT model'
+    assert manager.selected_profile_id() != 'legacy-local', 'Logging in must also activate the working GPT model'
 
 
 def test_reopening_verified_connection_shows_saved_capabilities_and_edit_invalidates_them(

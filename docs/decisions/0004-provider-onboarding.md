@@ -1,6 +1,6 @@
 # ADR-0004 · 여러 AI 제공자의 연결 준비를 공통 앱 화면으로 안내한다
 
-- 상태: 설계 제안, 제품 구현 전
+- 상태: 초기 설계 제안 · [ADR-0005](0005-integrated-provider-connections.md)로 구체화
 - 날짜: 2026-11-17
 - 적용 범위: GPT·Gemini·Grok·DeepSeek·Claude 연결 준비 화면의 후속 설계
 - 관련 결정: [로그인 렌더링 실험](0001-embedded-login-experiment.md), [인증 자료 저장](0002-development-secrets.md)

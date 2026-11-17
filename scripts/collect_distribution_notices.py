@@ -20,28 +20,138 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / 'resources/distribution/notice-sources.json'
 DEFAULT_CACHE = ROOT / 'verification/portable-prerequisites-20261116/packaging/source-cache'
-REVIEWED_QT_LIBRARIES = frozenset(('qt6core.dll', 'qt6gui.dll', 'qt6widgets.dll', 'qt6svg.dll'))
+REVIEWED_QT_LIBRARIES = frozenset((
+    'qt6core.dll', 'qt6gui.dll', 'qt6widgets.dll', 'qt6svg.dll',
+    'qt6network.dll', 'qt6webenginecore.dll', 'qt6webenginewidgets.dll',
+    'qt6positioning.dll', 'qt6qml.dll', 'qt6quick.dll', 'qt6webchannel.dll',
+    'qt6printsupport.dll', 'qt6quickwidgets.dll', 'qt6opengl.dll',
+    'qt6qmlmeta.dll', 'qt6qmlmodels.dll', 'qt6qmlworkerscript.dll',
+))
+REVIEWED_QT_EXTENSIONS = frozenset((
+    'qtcore.pyd', 'qtgui.pyd', 'qtwidgets.pyd', 'qtsvg.pyd',
+    'qtnetwork.pyd', 'qtwebenginecore.pyd', 'qtwebenginewidgets.pyd',
+    'qtpositioning.pyd', 'qtwebchannel.pyd', 'qtprintsupport.pyd',
+    'qtquickwidgets.pyd', 'qtopengl.pyd',
+))
 REVIEWED_QT_PLUGINS = frozenset((
     'platforms/qwindows.dll', 'platforms/qoffscreen.dll', 'platforms/qminimal.dll',
     'styles/qmodernwindowsstyle.dll', 'iconengines/qsvgicon.dll',
     'imageformats/qsvg.dll', 'imageformats/qgif.dll', 'imageformats/qico.dll',
     'imageformats/qjpeg.dll',
+    'tls/qschannelbackend.dll', 'tls/qcertonlybackend.dll',
 ))
+REVIEWED_WEBENGINE_RESOURCES = frozenset((
+    'icudtl.dat', 'qtwebengine_resources.pak', 'qtwebengine_resources_100p.pak',
+    'qtwebengine_resources_200p.pak', 'qtwebengine_devtools_resources.pak',
+    'v8_context_snapshot.bin',
+))
+REVIEWED_WEBENGINE_LOCALES = frozenset(('en-us.pak', 'ko.pak'))
+TLS_LIBRARY_NAME = re.compile(r'(?:lib(?:ssl|crypto)[-_].*|libeay32|ssleay32)\.dll')
 
 
 def reviewed_qt_binary(filename):
-    """Keep Qt scope within qtbase/qtsvg and avoid incidental host TLS libraries."""
+    """Admit the reviewed Widgets/WebEngine closure, never all installed Addons."""
     filename = str(filename).replace('\\', '/').casefold()
     basename = filename.rsplit('/', 1)[-1]
-    if basename in ('opengl32sw.dll', 'qtnetwork.pyd'):
+    if basename == 'opengl32sw.dll':
         return False
     if basename.startswith('qt6') and basename.endswith('.dll'):
         return basename in REVIEWED_QT_LIBRARIES
     if filename.startswith('pyside6/plugins/'):
         return filename.removeprefix('pyside6/plugins/') in REVIEWED_QT_PLUGINS
+    if filename.startswith('pyside6/resources/'):
+        return filename.removeprefix('pyside6/resources/') in REVIEWED_WEBENGINE_RESOURCES
     if filename.startswith('pyside6/translations/'):
-        return False
+        return filename.removeprefix('pyside6/translations/qtwebengine_locales/') in REVIEWED_WEBENGINE_LOCALES
+    if filename.startswith('pyside6/qml/'):
+        return False  # QWebEngineView uses Widgets; no QML imports are shipped.
+    if filename.startswith('pyside6/') and basename.startswith('qt') and basename.endswith('.pyd'):
+        return basename in REVIEWED_QT_EXTENSIONS
     return True
+
+
+def reviewed_binary_entry(row, python_prefix=None):
+    """Keep Python's own TLS DLLs; never collect Qt TLS from another host app."""
+    filename, source = row[:2]
+    basename = Path(str(filename).replace('\\', '/')).name.casefold()
+    if TLS_LIBRARY_NAME.fullmatch(basename):
+        prefix = Path(python_prefix or sys.base_prefix).resolve()
+        candidate = Path(source).resolve()
+        if candidate.parent not in (prefix, prefix / 'DLLs'):
+            return False
+    return reviewed_qt_binary(filename)
+
+
+def cpython_ssl_binaries(python_prefix=None):
+    """Resolve _ssl's actual PE TLS imports exclusively from this CPython build."""
+    import pefile
+
+    prefix = Path(python_prefix or sys.base_prefix).resolve(strict=True)
+    folders = (prefix / 'DLLs', prefix)
+    ssl_module = next((folder / '_ssl.pyd' for folder in folders
+                       if (folder / '_ssl.pyd').is_file()), None)
+    if (ssl_module is None or ssl_module.is_symlink()
+            or ssl_module.resolve().parent not in folders):
+        raise ValueError('Missing native CPython _ssl.pyd')
+    with pefile.PE(str(ssl_module), fast_load=True) as binary:
+        binary.parse_data_directories(directories=[1, 13])
+        names = sorted({entry.dll.decode('ascii')
+                        for table in ('DIRECTORY_ENTRY_IMPORT', 'DIRECTORY_ENTRY_DELAY_IMPORT')
+                        for entry in getattr(binary, table, [])
+                        if TLS_LIBRARY_NAME.fullmatch(entry.dll.decode('ascii').casefold())})
+    if not names:
+        raise ValueError('CPython _ssl.pyd has no reviewed dynamic TLS dependencies')
+    entries = [('_ssl.pyd', str(ssl_module), 'EXTENSION')]
+    for name in names:
+        source = next((folder / name for folder in folders if (folder / name).is_file()), None)
+        if (source is None or source.is_symlink()
+                or source.resolve().parent not in folders):
+            raise ValueError('Missing native CPython TLS dependency: ' + name)
+        entries.append((name, str(source), 'BINARY'))
+    return entries
+
+
+def pin_cpython_ssl_binaries(entries, python_prefix=None):
+    """Replace deduplicated host collisions instead of dropping _ssl's DLLs."""
+    selected = []
+    for row in entries:
+        basename = Path(str(row[0]).replace('\\', '/')).name.casefold()
+        if basename != '_ssl.pyd' and not TLS_LIBRARY_NAME.fullmatch(basename):
+            selected.append(row)
+    return selected + cpython_ssl_binaries(python_prefix)
+
+
+def verify_cpython_ssl_runtime(internal, expected):
+    for filename, expected_hash in expected.items():
+        path = Path(internal) / Path(safe_relative(filename))
+        if not path.is_file() or path.is_symlink():
+            raise ValueError('Missing CPython TLS runtime file: ' + filename)
+        if not re.fullmatch(r'[0-9a-f]{64}', expected_hash) or digest(path) != expected_hash:
+            raise ValueError('CPython TLS runtime checksum differs: ' + filename)
+
+
+def verify_qt_runtime(internal, manifest):
+    """Fail on omitted browser runtime files or files outside reviewed Qt scope."""
+    internal = Path(internal)
+    for path in internal.rglob('*'):
+        if path.is_symlink() or path.is_junction():
+            raise ValueError('Linked runtime paths are not admitted')
+        if path.is_file() and not reviewed_qt_binary(path.relative_to(internal).as_posix()):
+            raise ValueError('Unreviewed optional renderer/Qt component scope: ' + path.name)
+    runtime = manifest.get('qt_runtime', {})
+    sources = {row['component'] for row in manifest.get('sources', [])}
+    for filename, component in runtime.get('files', {}).items():
+        relative = safe_relative(filename)
+        if component not in sources:
+            raise ValueError('Runtime component has no corresponding source: ' + component)
+        path = internal / Path(relative)
+        if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
+            raise ValueError('Missing required Qt runtime file: ' + filename)
+    for filename, expected in runtime.get('sha256', {}).items():
+        path = internal / Path(safe_relative(filename))
+        if not path.is_file() or not re.fullmatch(r'[0-9a-f]{64}', expected) or digest(path) != expected:
+            raise ValueError('Qt runtime build checksum differs: ' + filename)
+    return runtime
 
 
 def digest(path):
@@ -58,8 +168,8 @@ def safe_relative(value):
 
 def _notice_name(name):
     name = name.casefold()
-    return any(term in name for term in ('license', 'copying', 'notice', 'copyright')) or name in (
-        'authors', 'authors.txt', 'qt_attributions.json', 'copyrights',
+    return any(term in name for term in ('license', 'copying', 'notice', 'copyright', 'patent')) or name in (
+        'authors', 'authors.txt', 'qt_attributions.json', 'copyrights', 'legal', 'legal.txt',
     )
 
 
@@ -146,11 +256,13 @@ def collect_notices(staged, *, source_cache=DEFAULT_CACHE, root=ROOT,
         raise ValueError('A separate staged Recheck executable is required')
     if (staged / 'licenses').exists() or (staged / 'third-party-sources').exists():
         raise ValueError('Use a fresh staging folder; existing license/source folders are not merged')
-    internal = staged / '_internal'
-    for path in internal.rglob('*'):
-        if path.is_file() and not reviewed_qt_binary(path.relative_to(internal).as_posix()):
-            raise ValueError('Unreviewed optional renderer/Qt component scope: ' + path.name)
     manifest = json.loads(Path(manifest_path).read_text(encoding='utf-8'))
+    runtime = verify_qt_runtime(staged / '_internal', manifest)
+    cpython_ssl = {}
+    if manifest.get('build_versions', {}).get('CPython'):
+        cpython_ssl = {name: digest(source) for name, source, _ in
+                       cpython_ssl_binaries(python_prefix)}
+        verify_cpython_ssl_runtime(staged / '_internal', cpython_ssl)
     sources = _source_rows(manifest, cache)
     prefix = Path(python_prefix) if python_prefix is not None else Path(sys.base_prefix)
     python_license = prefix / 'LICENSE.txt'
@@ -223,6 +335,8 @@ def collect_notices(staged, *, source_cache=DEFAULT_CACHE, root=ROOT,
                    sha256=digest(staged / name)) for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md')]
     record = dict(version=1, cpython_version=actual_versions['cpython'], packages=packages,
                   sources=manifest['sources'], files=files,
+                  qt_runtime=runtime,
+                  cpython_ssl=cpython_ssl,
                   library_replacement='REPLACEMENT.md',
                   review_scope='portable-application-only',
                   bundled_environment_images=(staged / 'environment').exists())
@@ -239,6 +353,8 @@ def verify_notices(staged):
     record = json.loads(marker.read_text(encoding='utf-8'))
     if record.get('version') != 1 or not record.get('files') or not record.get('sources'):
         raise ValueError('Missing license/source inventory')
+    verify_qt_runtime(staged / '_internal', record)
+    verify_cpython_ssl_runtime(staged / '_internal', record.get('cpython_ssl', {}))
     expected = set()
     for row in record['files']:
         relative = safe_relative(row['path'])

@@ -81,7 +81,7 @@ def ai_error_message(code):
         'access_denied': '계정 연결이 승인되지 않았습니다. 다시 로그인해 Recheck의 사용 권한을 확인해 주세요.',
         'oauth_network': 'OpenAI 로그인 서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.',
         'oauth_http': 'OpenAI가 로그인 요청을 거부했습니다. 다시 연결하거나 잠시 후 시도해 주세요.',
-        'invalid_grant': '로그인 요청이 만료됐습니다. 다시 연결해 새 로그인 화면에서 진행해 주세요.',
+        'invalid_grant': 'OpenAI가 인증 요청을 받아들이지 않았습니다. 새 로그인 화면에서 Recheck 연결을 다시 승인해 주세요.',
         'oauth_reauthentication': '계정에 다시 로그인해야 합니다. ChatGPT로 연결하기를 눌러 주세요.',
         'oauth_id_token': '계정 확인을 마치지 못했습니다. 다시 연결해 주세요. 반복되면 진단 기록을 확인해 주세요.',
         'malformed_response': '계정의 모델 목록 또는 응답을 읽지 못했습니다. 연결을 다시 확인해 주세요.',
@@ -152,7 +152,7 @@ class ChatGPTSetup:
         if cancel is not None and cancel.is_set():
             raise ProviderError('cancelled', '계정 연결을 중단했습니다.')
 
-    async def connect(self, profile_id, *, cancel=None, on_event=None):
+    async def connect(self, profile_id, *, cancel=None, on_event=None, on_url=None):
         self._check_cancel(cancel)
         profile = self.manager.get_profile(profile_id)
         if profile.provider != 'openai' or profile.auth_mode != 'chatgpt':
@@ -165,7 +165,10 @@ class ChatGPTSetup:
         await step('login')
         account = self.manager.account_status(profile_id)
         if not (account.get('authenticated') and account.get('inference_authorized')):
-            account = await self.manager.login(profile_id, cancel=cancel, on_event=on_event)
+            hooks = {'on_url': on_url} if on_url is not None else {}
+            account = await self.manager.login(
+                profile_id, cancel=cancel, on_event=on_event, **hooks
+            )
         if not account.get('authenticated') or not account.get('inference_authorized'):
             raise ProviderError('permission', 'ChatGPT 추론 사용 승인을 확인해 주세요.')
 

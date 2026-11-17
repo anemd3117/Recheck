@@ -29,6 +29,7 @@ import httpx
 import jwt
 from pydantic import SecretStr
 
+from .contracts import emit
 from .credentials import AuthError, canonical_origin
 
 _PROVIDERS = {
@@ -537,11 +538,13 @@ class OAuthService:
             inference_verified=False,
         )
 
-    async def login(self, provider, profile_id, config, cancel=None, on_url=None):
+    async def login(self, provider, profile_id, config, cancel=None, on_url=None, *, on_event=None):
         provider, config, _, _, _ = self._configuration(provider, config)
         try:
             return await _wait(
-                self._login(provider, profile_id, config, cancel, on_url), cancel, config.timeout
+                self._login(provider, profile_id, config, cancel, on_url, on_event=on_event),
+                cancel,
+                config.timeout,
             )
         except AuthError:
             raise
@@ -550,8 +553,59 @@ class OAuthService:
                 'oauth_login', '계정 연결을 완료하지 못했습니다. 인증 정보는 교체하지 않았습니다.'
             ) from None
 
-    async def _login(self, provider, profile_id, config, cancel=None, on_url=None):
+    async def _login(self, provider, profile_id, config, cancel=None, on_url=None, *, on_event=None):
+        provider, config, _, _, _ = self._configuration(provider, config)
+        pending = {}
+        try:
+            for round_number in range(2):
+                pending.clear()
+                try:
+                    return await self._login_once(
+                        provider, profile_id, config, cancel, on_url,
+                        on_event=on_event, pending=pending,
+                    )
+                except AuthError as error:
+                    if (
+                        provider != 'chatgpt'
+                        or round_number != 0
+                        or error.code != 'invalid_grant'
+                        or not pending.get('code_exchange_rejected')
+                        or not pending.get('client_id')
+                    ):
+                        raise
+                # The round has closed its listener and discarded its code. Only
+                # its validated issued registration survives, in memory, until a
+                # fresh authorization proves the account identity and permission.
+                config = OAuthConfig(**{**config.__dict__, 'client_id': pending['client_id']})
+                if _cancelled(cancel):
+                    raise AuthError('cancelled', '계정 연결을 취소했습니다.')
+                await emit(
+                    on_event,
+                    dict(
+                        kind='oauth_login', provider=provider, profile_id=profile_id,
+                        status='authorization_restart',
+                    ),
+                )
+                if _cancelled(cancel):
+                    raise AuthError('cancelled', '계정 연결을 취소했습니다.')
+        finally:
+            pending.clear()
+
+    async def _login_once(
+        self, provider, profile_id, config, cancel=None, on_url=None, *, on_event=None, pending,
+    ):
         provider, config, specification, origin, scopes = self._configuration(provider, config)
+
+        async def progress(status):
+            if _cancelled(cancel):
+                raise AuthError('cancelled', '계정 연결을 취소했습니다.')
+            await emit(
+                on_event,
+                dict(kind='oauth_login', provider=provider, profile_id=profile_id, status=status),
+            )
+            if _cancelled(cancel):
+                raise AuthError('cancelled', '계정 연결을 취소했습니다.')
+
         if _cancelled(cancel):
             raise AuthError('cancelled', '계정 연결을 취소했습니다.')
         previous = None
@@ -751,7 +805,9 @@ class OAuthService:
                     if inspect.isawaitable(outcome):
                         await _wait(outcome, cancel, config.timeout)
                 returned = await _wait(asyncio.shield(future), cancel, config.timeout)
+                await progress('callback_validated')
                 client_id = returned['client_id']
+                pending['client_id'] = client_id
                 form = dict(
                     grant_type='authorization_code',
                     client_id=client_id,
@@ -763,9 +819,14 @@ class OAuthService:
                     form['resource'] = specification['resource']
                 elif config.client_secret is not None:
                     form['client_secret'] = config.client_secret.get_secret_value()
-                response = await self._request(
-                    client, 'POST', document['token_endpoint'], config, cancel, form
-                )
+                await progress('token_exchange')
+                try:
+                    response = await self._request(
+                        client, 'POST', document['token_endpoint'], config, cancel, form
+                    )
+                except AuthError as error:
+                    pending['code_exchange_rejected'] = error.code == 'invalid_grant'
+                    raise
                 account = await self._identity(
                     client,
                     document,
@@ -776,6 +837,7 @@ class OAuthService:
                     cancel,
                     access_token=response.get('access_token'),
                 )
+                await progress('identity_verified')
                 tokens = self._tokens(
                     response, provider, client_id, account, nonce, host_id, scopes, config
                 )

@@ -71,6 +71,44 @@ class SetupManager:
         return self.get_profile(pid)
 
 
+@pytest.mark.parametrize('connected', [False, True])
+async def test_setup_forwards_dedicated_url_presenter_only_when_login_is_needed(connected):
+    module = flow_module()
+    manager = SetupManager(connected=connected)
+    presented = []
+
+    async def present(url):
+        presented.append(url)
+
+    original_login = manager.login
+
+    async def login(pid, *, cancel=None, on_event=None, on_url=None):
+        assert on_url is present
+        await on_url('https://auth.openai.com/fixture')
+        return await original_login(pid, cancel=cancel, on_event=on_event)
+
+    manager.login = login
+    setup = module.ChatGPTSetup(manager)
+    profile = setup.prepare_profile()
+    result = await setup.connect(profile.profile_id, on_url=present)
+    assert result['ready'] is True
+    assert presented == ([] if connected else ['https://auth.openai.com/fixture'])
+
+
+async def test_setup_absent_presenter_preserves_original_manager_login_signature():
+    module = flow_module()
+    manager = SetupManager()
+    original_login = manager.login
+
+    async def login(pid, *, cancel=None, on_event=None):
+        return await original_login(pid, cancel=cancel, on_event=on_event)
+
+    manager.login = login
+    setup = module.ChatGPTSetup(manager)
+    result = await setup.connect(setup.prepare_profile().profile_id)
+    assert result['ready'] is True
+
+
 def test_recommended_model_is_visible_and_explicit_existing_choice_is_preserved():
     module = flow_module()
     models = [ModelDescriptor(id='gpt-6-astra'), ModelDescriptor(id='gpt-6.1-sol')]
@@ -187,3 +225,10 @@ def test_known_login_failures_offer_a_specific_recovery_without_echoing_raw_erro
     assert '다시' in module.ai_error_message('oauth_timeout')
     assert '모델 목록' in module.ai_error_message('malformed_response')
     assert 'private-token' not in module.ai_error_message('private-token')
+
+
+def test_invalid_grant_reports_provider_rejection_without_assuming_expiry_or_storage():
+    message = flow_module().ai_error_message('invalid_grant')
+    assert 'OpenAI가 인증 요청을 받아들이지 않았습니다.' in message
+    assert '새 로그인 화면' in message and 'Recheck 연결을 다시 승인' in message
+    assert not any(claim in message for claim in ('만료', '저장', '삭제'))
