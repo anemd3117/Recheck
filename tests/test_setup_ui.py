@@ -43,6 +43,30 @@ def setup_result():
     )
 
 
+def test_connection_completion_stays_visible_until_explicit_next_step(window, monkeypatch):
+    widget, app = window
+    widget.open_provider_settings()
+    initial_page = widget.navigation.currentRow()
+    scheduled = []
+    monkeypatch.setattr(widget, 'find_setup', lambda **kwargs: scheduled.append(kwargs))
+    widget.beginner_ai_ready({'ready': True, 'profile': {'provider': 'openai', 'auth_mode': 'chatgpt'}})
+    app.processEvents()
+    assert widget.navigation.currentRow() == initial_page
+    assert widget.settings_tabs.currentWidget() is widget.provider_panel
+    assert scheduled == []
+    assert '연결 완료' in widget.banner.text()
+
+
+def test_connection_continue_uses_the_explicit_next_step(window, monkeypatch):
+    widget, _ = window
+    opened = []
+    widget._ai_ready = True
+    monkeypatch.setattr(widget, 'open_tool_installation', lambda: opened.append('tools'))
+    assert hasattr(widget.provider_panel, 'chatgpt_continue_button'), 'Explicit continuation missing'
+    widget.provider_panel.continue_requested.emit()
+    assert opened == ['tools']
+
+
 def test_first_run_shortcuts_and_result_empty_state(window, monkeypatch):
     widget, _ = window
     assert not widget.result_empty.isHidden()

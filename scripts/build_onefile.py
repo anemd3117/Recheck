@@ -48,6 +48,8 @@ def build_onefile():
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["RECHECK_STRICT_IDENTITY"] = "0"  # 개발/단독 빌드 모드
+    env["RECHECK_ONEFILE"] = "1"
+    env["RECHECK_BUNDLE_MODE"] = "onefile"
 
     start_time = time.time()
     print(f"실행 명령: {' '.join(cmd)}")

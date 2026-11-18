@@ -81,13 +81,17 @@ def ai_error_message(code):
         'access_denied': '계정 연결이 승인되지 않았습니다. 다시 로그인해 Recheck의 사용 권한을 확인해 주세요.',
         'oauth_network': 'OpenAI 로그인 서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.',
         'oauth_http': 'OpenAI가 로그인 요청을 거부했습니다. 다시 연결하거나 잠시 후 시도해 주세요.',
-        'invalid_grant': '로그인 요청이 만료됐습니다. 다시 연결해 새 로그인 화면에서 진행해 주세요.',
+        'invalid_grant': 'OpenAI가 인증 요청을 받아들이지 않았습니다. 새 로그인 화면에서 Recheck 연결을 다시 승인해 주세요.',
         'oauth_reauthentication': '계정에 다시 로그인해야 합니다. ChatGPT로 연결하기를 눌러 주세요.',
         'oauth_id_token': '계정 확인을 마치지 못했습니다. 다시 연결해 주세요. 반복되면 진단 기록을 확인해 주세요.',
         'malformed_response': '계정의 모델 목록 또는 응답을 읽지 못했습니다. 연결을 다시 확인해 주세요.',
         'model_catalog_empty': '이 계정에서 사용할 수 있는 GPT 모델이 없습니다. ChatGPT의 사용 권한과 이용 한도를 확인해 주세요.',
         'setup_inference': '로그인은 됐지만 GPT 응답을 확인하지 못했습니다. 이용 한도와 인터넷 연결을 확인한 뒤 다시 연결해 주세요.',
-        'permission': 'ChatGPT 사용 권한이 확인되지 않았습니다. 다시 연결해 Recheck 사용 승인을 확인해 주세요.',
+        'permission': '이 계정·워크스페이스의 ChatGPT 사용 권한을 확인해 주세요. 허용되지 않으면 다른 계정이나 AI 연결을 선택하세요.',
+        'subscription_sharing_user_not_eligible': (
+            '현재 선택한 계정·워크스페이스 또는 정책에서는 ChatGPT 사용 권한을 허용할 수 없습니다. '
+            '사용할 수 있는 다른 계정·워크스페이스를 선택하거나 다른 AI로 연결하세요.'
+        ),
         'rate_limit': 'AI 이용 한도에 도달했습니다. ChatGPT 사용량을 확인하거나 잠시 후 다시 시도해 주세요.',
         'authentication': '저장한 계정 인증을 확인하지 못했습니다. 다시 로그인해 주세요.',
         'credential_required': '먼저 ChatGPT 계정을 연결하거나 다른 AI의 키를 저장해 주세요.',
@@ -152,7 +156,8 @@ class ChatGPTSetup:
         if cancel is not None and cancel.is_set():
             raise ProviderError('cancelled', '계정 연결을 중단했습니다.')
 
-    async def connect(self, profile_id, *, cancel=None, on_event=None):
+    async def connect(self, profile_id, *, cancel=None, on_event=None, on_url=None,
+                      force_probe=False):
         self._check_cancel(cancel)
         profile = self.manager.get_profile(profile_id)
         if profile.provider != 'openai' or profile.auth_mode != 'chatgpt':
@@ -165,7 +170,10 @@ class ChatGPTSetup:
         await step('login')
         account = self.manager.account_status(profile_id)
         if not (account.get('authenticated') and account.get('inference_authorized')):
-            account = await self.manager.login(profile_id, cancel=cancel, on_event=on_event)
+            hooks = {'on_url': on_url} if on_url is not None else {}
+            account = await self.manager.login(
+                profile_id, cancel=cancel, on_event=on_event, **hooks
+            )
         if not account.get('authenticated') or not account.get('inference_authorized'):
             raise ProviderError('permission', 'ChatGPT 추론 사용 승인을 확인해 주세요.')
 
@@ -177,7 +185,7 @@ class ChatGPTSetup:
 
         await step('response')
         cached = getattr(self.manager, 'cached_capabilities', lambda pid: None)(profile_id)
-        reused = bool(
+        reused = not force_probe and bool(
             cached
             and cached.get('profile_fingerprint') == profile.fingerprint()
             and cached.get('model') == chosen
@@ -188,6 +196,16 @@ class ChatGPTSetup:
             if reused
             else await self.manager.probe_capabilities(profile_id, cancel=cancel, on_event=on_event)
         )
+        errors = capabilities.get('errors', [])
+        if isinstance(errors, list) and any(
+            isinstance(error, dict)
+            and error.get('code') == 'subscription_sharing_user_not_eligible'
+            for error in errors
+        ):
+            raise ProviderError(
+                'subscription_sharing_user_not_eligible',
+                ai_error_message('subscription_sharing_user_not_eligible'),
+            )
         if not (
             capabilities.get('basic') is True
             and capabilities.get('actual_inference_verified') is True

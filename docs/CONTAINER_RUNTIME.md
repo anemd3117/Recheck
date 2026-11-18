@@ -1,187 +1,75 @@
-# Recheck managed analysis environment
+# Recheck 관리형 분석 환경
 
-## Goal and scope
+## 목표와 범위
 
-Keep the Windows application and existing GPT sign-in workflow. The public Windows
-ZIP contains the executable, Python/Qt runtime and reviewed Docker source contexts.
-It does not redistribute the old private Docker archives. Users do not need host
-Git, Python, Java, Ghidra, REA or MCP to launch the executable and prepare the managed
-environment. Docker Desktop and its Linux amd64 engine are needed for managed
-static analysis and Linux execution comparison. Direct static analysis instead
-uses an installed Ghidra and compatible JDK.
-Rebuild and folder comparison are outside this change.
+Windows 앱과 기존 GPT 로그인 흐름을 유지한다. 공개 Windows ZIP에는 실행 파일, Python·Qt와 검토한 Docker 빌드 자료를 넣으며 이전 비공개 Docker archive는 재배포하지 않는다. EXE를 실행하고 관리형 환경을 준비하기 위해 호스트 Git·Python·Java·Ghidra·REA·MCP를 따로 설치할 필요는 없다. 관리형 정적분석과 Linux 실행 비교에는 Docker Desktop의 Linux amd64 엔진이 필요하다. 직접 설치한 Ghidra를 사용하는 정적분석에는 호환되는 JDK가 필요하다. Rebuild와 폴더 종합 비교는 이 범위에 포함하지 않는다.
 
-Choose an analysis scope, check its required tools, prepare any missing environment,
-then compare two programs and inspect the evidence. AI is optional and independent
-of the analysis scope. New installations offer Gemini free setup first and GPT as
-the recommended alternative. Ollama starts only when the user selects local AI.
+분석 범위를 고르고 필요한 도구와 환경을 준비한 뒤 두 프로그램을 비교하고 근거를 확인한다. AI는 분석 범위와 별도로 선택한다. 0.1.6 연결 화면은 추천 ChatGPT → Gemini 무료 API → 공통 제공자 연결 순서다. 비교마다 준비된 프로필·모델 하나를 선택하며 연결된 모든 제공자를 자동 호출하지 않는다. Ollama는 로컬 AI를 선택한 경우에만 시작한다.
 
-## Ownership and boundaries
+## 책임과 경계
 
-- Recheck owns orchestration, input snapshots, cancellation, evidence validation,
-  persistence, comparison, and AI evidence selection.
-- A static worker runs pinned REA MCP and Ghidra in one container. Its local MCP
-  client initializes the server, opens the snapshot, inventories procedures,
-  queries functions, and closes the target and server. This container never runs
-  the submitted program.
-- A separate execution image runs each test without network access. Both compared
-  programs use the same inspected immutable image ID.
-- An optional Ollama service uses a managed persistent model volume and a loopback
-  endpoint. No GPT credentials, Docker socket, or unrelated host folders enter
-  these containers.
-- Docker Desktop and WSL 2 remain host prerequisites. Recheck diagnoses them and
-  offers actionable instructions; it does not change global Docker context or
-  operating-system configuration.
+- Recheck는 작업 조정, 입력 사본, 취소, 근거 검증·저장, 비교와 AI에 보낼 근거 선택을 담당한다.
+- 정적 worker는 고정한 REA MCP와 Ghidra를 같은 컨테이너에서 실행한다. 로컬 MCP 클라이언트가 서버 초기화, 입력 사본 열기, 함수 목록·본문 조회와 대상·서버 종료를 수행한다. 제출한 프로그램을 이 컨테이너에서 실행하지 않는다.
+- 별도 실행 이미지는 네트워크 없이 각 입력을 실행한다. 양쪽 프로그램은 검사한 같은 불변 이미지 ID를 사용한다.
+- 선택적인 Ollama 서비스는 전용 모델 볼륨과 loopback 주소를 사용한다. 이 컨테이너에 GPT 인증 자료·Docker socket·관계없는 호스트 폴더를 전달하지 않는다.
+- Docker Desktop과 WSL 2는 호스트 전제조건이다. 앱은 상태와 해결 절차를 안내하며 전역 Docker context나 운영체제 설정을 바꾸지 않는다.
 
-## Distribution and trust
+## 배포와 신뢰 검증
 
-`resources/runtime/environment.json` retains the exact image identities and archive
-digests of the earlier developer/offline environment. Existing verified offline
-archives remain supported: preparation hashes them before loading, then inspects
-the image. Registry downloads require explicitly trusted immutable digest references.
-Those historical TAR files are not included in the public Windows ZIP.
+`resources/runtime/environment.json`은 이전 개발·오프라인 환경의 정확한 이미지 ID와 archive 해시를 보존한다. 기존 검증 오프라인 archive도 지원한다. 불러오기 전에 파일 해시를 검사하고 이후 실제 이미지를 확인한다. 레지스트리에서 받는 이미지는 명시적으로 신뢰한 불변 digest가 필요하다. 과거 TAR 파일은 공개 Windows ZIP에 포함하지 않는다.
 
-For the public ZIP, the separate **build analysis environment** setup action downloads
-official upstream components using the shipped Dockerfiles and lockfile, then builds
-the static and execution images locally. This action needs internet access, several
-GB of free space and potentially several minutes. It requires an explicit user
-action; normal probe, comparison and legacy preparation do not build or download
-source environments. Optional Ollama is built only when explicitly requested; no
-model is downloaded or service/container started by the builder.
+공개 ZIP의 **분석 도구 내려받아 준비**는 동봉 Dockerfile·lockfile로 공식 구성요소를 내려받아 정적·실행 이미지를 이 PC에서 만든다. 인터넷, 수 GB의 공간과 수 분 이상의 시간이 필요할 수 있으며 사용자가 명시적으로 실행해야 한다. 일반 상태 확인·비교·기존 준비 경로는 소스 환경을 임의로 빌드하거나 다운로드하지 않는다. Ollama 이미지도 직접 선택했을 때만 빌드하며, 빌드 자체가 모델 다운로드나 서비스·컨테이너 시작을 수행하지는 않는다.
 
-The builder requires a ready local Linux amd64 Docker endpoint, copies each reviewed
-source context into temporary app-owned staging, hashes every file plus the manifest,
-and checks those hashes before and after building. Docker writes an immutable ID to
-a unique iidfile. The manager checks this exact ID, platform, component, build-contract
-and source-context labels before atomically saving a local receipt under
-`%LOCALAPPDATA%\Recheck\runtime\local-builds.json` (or `RECHECK_DATA_DIR`). The
-shipped manifest is never rewritten and mutable tags grant no trust. A changed
-context/manifest, missing image or invalid receipt prevents that local image from
-being selected; rebuilding is the explicit recovery action. Static and execution
-adapters both use these checked image IDs. A failed/cancelled build leaves a previous
-receipt intact and does not register partial success. Docker may retain intermediate
-build cache; the app does not remove unrelated images or volumes.
+빌더는 준비된 로컬 Linux amd64 Docker를 요구한다. 검토한 소스와 manifest를 앱 전용 임시 staging에 복사하고 모든 파일의 해시를 빌드 전후에 대조한다. Docker가 고유 iidfile에 기록한 불변 이미지 ID를 읽어 플랫폼·구성요소·빌드 계약·소스 해시 label을 확인한 뒤 `%LOCALAPPDATA%\Recheck\runtime\local-builds.json` 또는 `RECHECK_DATA_DIR` 아래에 검증 기록을 원자적으로 저장한다. 동봉 manifest를 다시 쓰지 않으며 변경 가능한 태그만으로 이미지를 신뢰하지 않는다.
 
-Image IDs built on another PC can differ because package repositories and Docker
-build metadata change even when source contexts match. Their locally inspected IDs
-and context hashes are recorded instead of presenting them as the old published
-image IDs. Images, receipts and optional model data remain separate from credentials.
+소스·manifest 변경, 이미지 누락, 잘못된 검증 기록이 있으면 해당 로컬 이미지를 선택할 수 없다. 다시 빌드하려면 사용자가 준비 동작을 직접 실행한다. 정적·실행 어댑터는 이 검사를 통과한 이미지 ID를 사용한다. 실패·취소한 빌드는 기존 기록을 보존하고 부분 성공으로 등록하지 않는다. Docker의 중간 캐시는 남을 수 있지만 관계없는 이미지·볼륨은 지우지 않는다.
 
-Managed static analysis requires the static image; dynamic analysis requires the
-execution image; both requires both images. Neither AI nor Ollama is required
-when AI explanations are off. Ollama is not required for external AI. The
-manager probes without making changes; preparation and service start are explicit
-application operations. It only removes its own temporary containers and preserves
-model data. Existing local Ollama installations retain their endpoint.
+소스가 같아도 패키지 저장소나 Docker 빌드 정보가 달라 다른 PC의 이미지 ID가 달라질 수 있다. 실제 로컬 ID와 소스 해시를 기록하며 이를 과거 공개 이미지 ID와 같다고 표시하지 않는다. 이미지·검증 기록·모델 자료는 인증 자료와 분리한다.
 
-CLI and GUI check file support and the selected scope's tools before registering
-an analysis. A rejected start has no analysis run. A tool or runtime failure after
-analysis starts retains its failed run and evidence for diagnosis and retry.
-Selecting direct Ghidra for static analysis does not change the packaged execution
-adapter. Legacy execution images are inspected without building during readiness
-checks; missing or stale images block analysis until explicit preparation.
+관리형 정적분석에는 정적 이미지, 동적분석에는 실행 이미지, 둘 다 분석에는 두 이미지가 필요하다. AI 설명을 끄면 AI·Ollama는 필요하지 않고, 외부 AI에도 Ollama가 필요하지 않다. 관리자의 상태 점검은 자료를 변경하지 않는다. 환경 준비·서비스 시작은 별도 앱 동작이며 자기 임시 컨테이너만 제거하고 모델 자료는 보존한다. 기존 로컬 Ollama의 주소도 유지한다.
 
-## Static analysis contract
+CLI·GUI는 분석을 등록하기 전에 형식 지원과 선택 범위의 도구를 확인한다. 시작 전에 거절되면 분석 기록이 생기지 않는다. 시작 후 도구·환경이 실패하면 진단·재시도를 위해 실패 기록과 근거를 보존한다. 정적 경로로 직접 설치한 Ghidra를 선택해도 실행 어댑터를 바꾸지 않는다. 준비 상태 점검은 기존 실행 이미지를 빌드 없이 검사하며 이미지가 없거나 오래됐으면 명시적 준비 전까지 분석을 막는다.
 
-The host sends one bounded JSON request to a non-root, network-disabled worker.
-Inputs are mounted read-only, output is isolated, capabilities are dropped, and
-CPU, memory and time are bounded. The worker returns a receipt and a versioned
-result containing the binary hash, functions, tool versions, coverage limitations,
-and raw MCP evidence. Missing CFG, decompilation or truncated inventory must stay
-explicit; these are never presented as complete observations.
+## 정적분석 계약
 
-The host validates schema, binary and result hashes, paths and container identity.
-Only complete validated results are cacheable, keyed by binary, image and contract.
-Selection occurs before analysis: automatic mode prefers a ready managed worker,
-otherwise an available direct Ghidra installation. Explicit REA selection never
-silently changes backend after failure. The direct adapter remains available for
-compatibility and evidence comparison.
+호스트는 크기가 제한된 JSON 요청 하나를 네트워크 없는 비관리자 worker에 보낸다. 입력은 읽기 전용으로 연결하고 출력은 분리하며, 추가 권한을 제거하고 CPU·메모리·시간을 제한한다. worker는 바이너리 해시, 함수, 도구 버전, 수집 한계, 원시 MCP 근거를 버전이 있는 결과와 실행 확인 자료로 반환한다. CFG·의사코드 누락이나 잘린 목록을 완전한 관찰로 표시하지 않는다.
 
-## Implementation and acceptance sequence
+호스트는 스키마, 입력·결과 해시, 경로와 컨테이너 식별자를 검증한다. 검증이 완료된 결과만 바이너리·이미지·계약에 결합해 캐시한다. 경로는 분석 전에 고른다. 자동 선택은 준비된 관리형 worker를 우선하고, 없으면 사용할 수 있는 직접 설치 Ghidra를 사용한다. REA를 명시적으로 선택했다가 실패해도 다른 경로로 조용히 바꾸지 않는다. 직접 설치 어댑터는 호환성과 근거 대조를 위해 유지한다.
 
-1. Add and test runtime trust policy, offline preparation, and optional Ollama
-   lifecycle. Test invalid identity, archive tampering, remote context, cancellation
-   and ownership boundaries before integrating the UI.
-2. Build a pinned REA/Ghidra worker; record actual released MCP schemas and raw
-   requests/results. Analyze the shipped ELF fixture without executing it.
-3. Add the host static adapter, routing and backend-aware evidence provenance.
-   Compare real REA results with direct Ghidra on the same fixture; document
-   differences and unsupported evidence.
-4. Integrate environment preparation into the existing beginner workflow, keeping
-   advanced settings optional. Verify GPT does not start or download Ollama.
-5. Build labelled execution and optional local-AI images. Record exact identities,
-   export verified archives, and test a real containerized comparison and offline
-   preparation. Document Windows-target limitations of a Linux Docker engine.
-6. Run the appropriate regression suite, package the verified application, verify
-   the distribution independently, and record source identity, commands, results
-   and remaining limitations before publishing the feature branch.
+## 구현·수용 순서
 
-Development evidence is stored outside the source payload under
-`verification/container-runtime-20261115`. A design or passing mock test alone does
-not establish a working distribution; actual worker and deployment checks are
-required.
+1. 환경 신뢰·오프라인 준비·선택적 Ollama 수명 관리를 구현한다. UI 통합 전에 잘못된 식별자, archive 변조, 원격 context, 취소와 소유권 경계를 검사한다.
+2. 버전을 고정한 REA·Ghidra worker를 만든다. 실제 MCP 스키마·원시 요청·결과를 기록하고 동봉 ELF fixture를 실행하지 않고 분석한다.
+3. 호스트 정적 어댑터, 경로 선택과 분석 도구별 근거 출처를 연결한다. 같은 fixture의 실제 REA·직접 Ghidra 결과를 비교하고 차이·미지원 근거를 기록한다.
+4. 초보자 흐름에 환경 준비를 통합하고 고급 설정은 선택으로 둔다. GPT가 Ollama를 시작하거나 내려받지 않는지 검사한다.
+5. 역할 label이 있는 실행·로컬 AI 이미지를 만든다. 정확한 ID와 검증한 archive를 기록하고 실제 컨테이너 비교·오프라인 준비를 시험한다. Linux Docker에서 Windows 대상을 실행할 수 없는 한계도 명시한다.
+6. 관련 회귀와 검증된 앱 패키징, 독립 배포 검사를 수행한다. 브랜치를 게시하기 전에 소스 식별자·명령·결과·남은 한계를 기록한다.
 
-## Verified implementation observations (2026-11-15)
+개발 근거는 소스 배포 밖 로컬 `verification/container-runtime-20261115`에 보관한다. 설계나 모의 검사 통과만으로 실제 배포가 동작한다고 판단하지 않으며 실제 worker·배포 확인이 필요하다.
 
-- The real isolated worker inventoried 21 procedures: 17 native functions and
-  four external references. All 17 native dossiers and pseudocode requests
-  succeeded; 13 returned a complete CFG. Missing linkage-thunk blocks and unknown
-  inventory relationship coverage remain explicit, so the result is `partial`.
-- On the same input and Ghidra version, the direct exporter and REA returned the
-  same 17 native addresses and names. For `main` and `bounded_sum`, body sizes,
-  instruction counts, mnemonics, resolved calls and trimmed pseudocode matched.
-  The direct exporter's `main` graph also includes three call-target edges; REA
-  keeps those calls separate from its four intrafunction CFG edges.
-- A real Engine comparison of the sample and a deliberately changed loop bound
-  returned three matches and two differences for inputs 0, 8, 100, 101 and 150.
-  All ten executions used the same pinned execution image. Static stages stayed
-  partial; structure, execution and report stages completed. All 13 created
-  containers had no network and were removed.
-- Windows Docker bind paths failed at a deep output directory. Static analysis
-  now uses short owned transport staging and copies validated evidence into the
-  requested run directory. The same deep-path comparison and running-container
-  cancellation were repeated successfully, with staging and containers removed.
-- The optional CPU service passed actual local inference with
-  `qwen3:4b-instruct`. Its catalog and process digest matched. Strict basic,
-  JSON and tool roundtrip proof was persisted and restored by a new profile
-  manager. The thinking alias `qwen3:4b` failed the strict check and is not the
-  preset. The nonce prompt was clarified; exact comparison remains mandatory.
-- Image archives are approximately 900 MB (static), 31 MB (execution) and 72 MB
-  (CPU Ollama). All three exported hashes, sizes and internal image identities
-  were checked. Model weights are a separate first-use download of about 2.5 GB;
-  they and generated local service keys are excluded from the distribution.
+## 2026-11-15에 확인한 구현 결과
 
-Backend completion and evidence completeness are distinct: an AI follow-up may
-finish after a valid partial extraction, while the extraction and overall run
-retain their partial status. Failed or blocked stages still prevent completion.
-No unbounded retries or permission escalation are introduced.
+아래는 당시 오프라인 환경·실행본의 역사적 결과다. 이후 공개 ZIP의 구성이나 새 실행본 검증으로 대신하지 않는다.
 
-The actual GPT check validated the interpretation and citations in its original
-4-of-5-request workflow. A later agent-only check finished in 2 of 5 requests as
-a separate workflow. The first trace exposed unnecessary nested JSON encoding:
-valid structured context was being serialized twice. Keeping bounded dict/list
-context structured retained every field and limitation, saved about 5 KB, and
-allowed all seven measured tool results plus the final answer within the same
-40,000-character cap. String inputs stay untrusted strings; oversized context
-still uses a bounded excerpt with an omitted-character count. The recorded
-five-request replay is a regression test, not an additional live-run claim.
+- 실제 격리 worker가 21개 항목(네이티브 함수 17개, 외부 참조 4개)을 수집했다. 네이티브 17개 모두 상세 자료·의사코드 조회를 통과했고 13개는 완전한 CFG를 반환했다. 연결용 함수 블록 누락과 불명확한 전체 관계 수집 범위 때문에 결과는 `partial`로 남겼다.
+- 같은 입력·Ghidra 버전에서 직접 exporter와 REA의 네이티브 17개 주소·이름이 일치했다. `main`·`bounded_sum`의 본문 크기, 명령 수·종류, 해석된 호출과 앞뒤 공백을 정리한 의사코드도 일치했다. 직접 exporter의 `main` 그래프에는 호출 대상 간선 3개가 더 있으며, REA는 이를 함수 내부 CFG 간선 4개와 따로 보관한다.
+- 반복 경계를 의도적으로 바꾼 샘플의 실제 Engine 비교에서 입력 0·8·100·101·150 중 3개 일치·2개 차이를 확인했다. 총 10회 실행에 같은 고정 실행 이미지를 사용했다. 정적 단계는 부분 상태, 구조·실행·보고서 단계는 완료였다. 생성한 컨테이너 13개 모두 네트워크 없이 실행하고 제거했다.
+- 깊은 출력 폴더에서 Windows Docker 공유 경로 오류가 발생했다. 정적분석은 짧은 전용 전달 폴더를 사용한 뒤 검증한 근거를 요청 경로로 복사하도록 수정했다. 같은 깊은 경로 비교와 실행 중 취소를 다시 통과했고 전달 폴더·컨테이너를 정리했다.
+- CPU Ollama의 `qwen3:4b-instruct` 실제 응답을 확인했다. 모델 목록과 실행 digest가 일치했고 엄격한 기본 응답·JSON·도구 호출 왕복 기록이 저장돼 새 프로필 관리자에서도 복원됐다. 추론형 별칭 `qwen3:4b`는 엄격한 검사를 실패해 기본 모델로 쓰지 않았다. nonce 요청 문구는 명확히 하되 정확한 값 대조는 유지했다.
+- 당시 내보낸 archive는 정적 약 900 MB, 실행 약 31 MB, CPU Ollama 약 72 MB였다. 세 파일의 해시·크기·내부 이미지 ID를 모두 검사했다. 모델 가중치 약 2.5 GB는 별도 첫 사용 다운로드이며 생성한 로컬 서비스 키와 함께 배포에서 제외했다.
 
-The Windows executable was also exercised with a new application data folder:
-one local-AI button verified the cached model, selected the verified connection,
-prepared the environment, and opened the comparison screen. After all three owned
-image IDs were removed, the same packaged app restored Ollama on startup and
-restored static/execution images through its automatic-preparation button, using
-only the adjacent verified archives. No Ghidra/Java paths were entered and model
-weights were retained. The remaining optional service was stopped after QA.
-The empty-image check also exposed a misleading Docker-installation instruction;
-the final guidance distinguishes a running engine from an unimported image.
+분석 절차 완료와 근거 완전성은 다르다. 유효한 부분 추출 뒤 AI 추가 분석이 끝나도 추출·전체 분석은 부분 상태를 유지한다. 실패·차단 단계가 있으면 완료로 올리지 않는다. 무제한 재시도나 권한 상승을 추가하지 않았다.
 
-## Primary references
+실제 GPT 검사는 원래 5회 예산 중 4회를 사용해 해석·인용을 검증했다. 이후 추가 분석만 수행한 별도 작업은 5회 중 2회로 끝났다. 첫 기록에서는 구조화 문맥을 중복 JSON 인코딩하는 문제가 드러났다. 제한된 dict·list 문맥을 구조 그대로 유지해 필드·한계는 보존하면서 약 5 KB를 줄였고, 같은 40,000자 제한에 실제 도구 결과 7개와 최종 답변을 담았다. 문자열 입력은 신뢰하지 않는 문자열로 남기며 큰 문맥은 생략 문자 수를 표시한 제한 발췌를 사용한다. 기록을 재생한 5회 요청 검사는 회귀 검사이며 새 실제 호출로 계산하지 않는다.
+
+당시 Windows 실행본도 새 앱 데이터로 확인했다. 로컬 AI 버튼 한 번으로 캐시된 모델 검증, 연결 선택, 환경 준비와 비교 화면 진입을 수행했다. 앱 소유 이미지 3개를 제거한 뒤 같은 앱이 인접한 검증 archive만으로 시작 시 Ollama를 복원하고 명시적 준비 버튼에서 정적·실행 이미지를 복원했다. Ghidra·Java 경로를 입력하지 않았고 모델 가중치는 보존했다. QA 뒤 선택적 서비스를 중지했다. 이미지가 없는 상태의 점검에서 잘못된 Docker 설치 안내도 발견해 엔진 실행과 이미지 가져오기를 구분하도록 수정했다.
+
+## 공식 참고 자료
 
 - [REA](https://github.com/morluto/rea)
-- [MCP architecture](https://modelcontextprotocol.io/docs/learn/architecture)
-- [Docker image save](https://docs.docker.com/reference/cli/docker/image/save/)
-- [Docker image load](https://docs.docker.com/reference/cli/docker/image/load/)
-- [Docker Desktop Windows prerequisites](https://docs.docker.com/desktop/setup/install/windows-install/)
+- [MCP 구조](https://modelcontextprotocol.io/docs/learn/architecture)
+- [Docker 이미지 저장](https://docs.docker.com/reference/cli/docker/image/save/)
+- [Docker 이미지 불러오기](https://docs.docker.com/reference/cli/docker/image/load/)
+- [Docker Desktop Windows 전제조건](https://docs.docker.com/desktop/setup/install/windows-install/)
 - [Ollama Docker](https://docs.ollama.com/docker)
-- [Ollama FAQ](https://docs.ollama.com/faq)
+- [Ollama 자주 묻는 질문](https://docs.ollama.com/faq)

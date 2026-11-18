@@ -5,6 +5,8 @@ import importlib
 import io
 import json
 from pathlib import Path
+import shutil
+import sys
 import tarfile
 from types import SimpleNamespace
 
@@ -42,6 +44,10 @@ def inputs(tmp_path):
         info = tarfile.TarInfo('qtbase-6.12.0/src/3rdparty/jpeg/README.md')
         info.size = len(attribution)
         stream.addfile(info, io.BytesIO(attribution))
+        patent = b'Original codec patent grant and conditions\n'
+        info = tarfile.TarInfo('qtbase-6.12.0/src/3rdparty/codec/PATENTS')
+        info.size = len(patent)
+        stream.addfile(info, io.BytesIO(patent))
     manifest = root / 'source-manifest.json'
     manifest.write_text(json.dumps({'version': 1, 'sources': [{
         'component': 'qtbase', 'version': '6.12.0', 'filename': archive.name,
@@ -86,6 +92,12 @@ def test_third_party_readme_notices_are_preserved_even_when_not_named_license(in
     m = notice_module()
     collect(m, inputs)
     assert (inputs.stage / 'licenses/qtbase/qtbase-6.12.0/src/3rdparty/jpeg/README.md').read_bytes() == b'Upstream third-party copyright and distribution conditions\n'
+
+
+def test_third_party_codec_patent_terms_are_preserved(inputs):
+    m = notice_module()
+    collect(m, inputs)
+    assert (inputs.stage / 'licenses/qtbase/qtbase-6.12.0/src/3rdparty/codec/PATENTS').read_bytes() == b'Original codec patent grant and conditions\n'
 
 
 def test_wrong_source_archive_is_rejected_before_license_tree_is_written(inputs):
@@ -190,3 +202,190 @@ def test_source_fetch_verifies_bytes_before_publishing_the_cache_entry(inputs, m
     m.fetch_sources(inputs.cache, inputs.manifest)
     assert inputs.archive.read_bytes() == payload
     assert not inputs.archive.with_name(inputs.archive.name + '.partial').exists()
+
+
+@pytest.mark.parametrize('filename', [
+    'Qt6Network.dll', 'Qt6WebEngineCore.dll', 'Qt6WebEngineWidgets.dll',
+    'Qt6Positioning.dll', 'Qt6Qml.dll', 'Qt6Quick.dll', 'Qt6WebChannel.dll',
+    'Qt6PrintSupport.dll', 'Qt6QuickWidgets.dll', 'Qt6OpenGL.dll',
+    'Qt6QmlMeta.dll', 'Qt6QmlModels.dll', 'Qt6QmlWorkerScript.dll',
+    'QtNetwork.pyd', 'QtWebEngineCore.pyd', 'QtWebEngineWidgets.pyd',
+    'QtWebEngineProcess.exe', 'qt.conf',
+    'plugins/tls/qschannelbackend.dll', 'plugins/tls/qcertonlybackend.dll',
+    'resources/icudtl.dat', 'resources/qtwebengine_resources.pak',
+    'resources/qtwebengine_resources_100p.pak',
+    'resources/qtwebengine_resources_200p.pak',
+    'resources/qtwebengine_devtools_resources.pak',
+    'resources/v8_context_snapshot.bin',
+    'translations/qtwebengine_locales/en-US.pak',
+    'translations/qtwebengine_locales/ko.pak',
+])
+def test_browser_runtime_survives_binary_review(filename):
+    assert notice_module().reviewed_qt_binary('PySide6/' + filename)
+
+
+@pytest.mark.parametrize('filename', [
+    'Qt6Pdf.dll', 'Qt6Charts.dll', 'QtPdf.pyd',
+    'QtWebEngineQuick.pyd', 'plugins/tls/qopensslbackend.dll',
+    'resources/v8_context_snapshot.debug.bin',
+    'resources/qtwebengine_resources.debug.pak',
+    'resources/unknown.pak', 'translations/qtwebengine_locales/unknown.pak',
+    'translations/qtwebengine_locales/ko.debug.pak',
+    'translations/qtwebengine_locales/en-US.pak/extra',
+    'qml/QtQuick/qtquick2plugin.dll',
+])
+def test_unreviewed_browser_payload_still_fails_binary_review(filename):
+    assert not notice_module().reviewed_qt_binary('PySide6/' + filename)
+
+
+def browser_manifest(values):
+    data = json.loads(values.manifest.read_text())
+    data['qt_runtime'] = {'files': {
+        'PySide6/QtWebEngineProcess.exe': 'qtbase',
+        'PySide6/resources/icudtl.dat': 'qtbase',
+    }}
+    values.manifest.write_text(json.dumps(data))
+    for name in data['qt_runtime']['files']:
+        target = values.stage / '_internal' / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'reviewed runtime fixture')
+    return data
+
+
+def test_missing_browser_helper_cannot_be_certified(inputs):
+    m = notice_module()
+    browser_manifest(inputs)
+    (inputs.stage / '_internal/PySide6/QtWebEngineProcess.exe').unlink()
+    with pytest.raises(ValueError, match='runtime|missing'):
+        collect(m, inputs)
+    assert not (inputs.stage / 'licenses').exists()
+
+
+def test_runtime_without_its_corresponding_source_cannot_be_certified(inputs):
+    m = notice_module()
+    data = browser_manifest(inputs)
+    data['qt_runtime']['files']['PySide6/QtWebEngineProcess.exe'] = 'qtwebengine'
+    inputs.manifest.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match='source|component'):
+        collect(m, inputs)
+    assert not (inputs.stage / 'licenses').exists()
+
+
+def test_collected_runtime_scope_is_rechecked_before_publication(inputs):
+    m = notice_module()
+    browser_manifest(inputs)
+    collect(m, inputs)
+    (inputs.stage / '_internal/PySide6/resources/icudtl.dat').unlink()
+    with pytest.raises(ValueError, match='runtime|missing'):
+        m.verify_notices(inputs.stage)
+
+
+def test_unreviewed_qt_file_added_after_collection_is_rejected(inputs):
+    m = notice_module()
+    collect(m, inputs)
+    (inputs.stage / '_internal/PySide6/Qt6Pdf.dll').write_bytes(b'unreviewed runtime')
+    with pytest.raises(ValueError, match='scope'):
+        m.verify_notices(inputs.stage)
+
+
+def test_browser_binary_checksum_is_rechecked_before_publication(inputs):
+    m = notice_module()
+    data = browser_manifest(inputs)
+    data['qt_runtime']['sha256'] = {
+        'PySide6/QtWebEngineProcess.exe': hashlib.sha256(b'reviewed runtime fixture').hexdigest(),
+    }
+    inputs.manifest.write_text(json.dumps(data))
+    collect(m, inputs)
+    (inputs.stage / '_internal/PySide6/QtWebEngineProcess.exe').write_bytes(b'other browser build')
+    with pytest.raises(ValueError, match='checksum|runtime'):
+        m.verify_notices(inputs.stage)
+
+
+def test_host_tls_libraries_are_dropped_but_cpython_tls_is_preserved(tmp_path):
+    m = notice_module()
+    prefix = tmp_path / 'python'
+    own = prefix / 'DLLs/libssl-4.dll'
+    host = tmp_path / 'another-app/libssl-3-x64.dll'
+    package = prefix / 'Lib/site-packages/other/libcrypto-3.dll'
+    for source in (own, host, package):
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'TLS fixture')
+    assert m.reviewed_binary_entry(('libssl-4.dll', str(own), 'BINARY'), python_prefix=prefix)
+    assert not m.reviewed_binary_entry(('libssl-3-x64.dll', str(host), 'BINARY'), python_prefix=prefix)
+    assert not m.reviewed_binary_entry(('libcrypto-3.dll', str(package), 'BINARY'), python_prefix=prefix)
+
+
+@pytest.fixture
+def cpython_ssl_files(inputs):
+    if sys.platform != 'win32':
+        pytest.skip('The frozen Windows build uses native CPython PE dependencies')
+    native_ssl = Path(importlib.util.find_spec('_ssl').origin)
+    native_prefix = Path(sys.base_prefix).resolve()
+    assert native_ssl.parent in (native_prefix, native_prefix / 'DLLs')
+    # Real _ssl PE imports, controlled CPython/host DLL payloads. The test is
+    # about preserving source selection after PyInstaller's basename collision.
+    folder = inputs.prefix / 'DLLs'
+    folder.mkdir()
+    shutil.copyfile(native_ssl, folder / '_ssl.pyd')
+    import pefile
+    with pefile.PE(str(native_ssl), fast_load=True) as binary:
+        binary.parse_data_directories(directories=[1])
+        names = [entry.dll.decode('ascii') for entry in binary.DIRECTORY_ENTRY_IMPORT
+                 if entry.dll.lower().startswith((b'libssl-', b'libcrypto-'))]
+    assert len(names) == 2
+    for name in names:
+        (folder / name).write_bytes(('CPython owns ' + name).encode())
+    return inputs, folder, names
+
+
+def test_cpython_ssl_dependencies_replace_a_host_basename_collision(cpython_ssl_files):
+    values, folder, names = cpython_ssl_files
+    host = values.root / 'other-app'
+    host.mkdir()
+    entries = [('_ssl.pyd', str(folder / '_ssl.pyd'), 'BINARY')]
+    for name in names:
+        (host / name).write_bytes(b'host TLS build')
+        entries.append((name, str(host / name), 'BINARY'))
+    # This mirrors the observed Analysis TOC: only the host row survives its
+    # initial basename deduplication. Merely dropping it leaves _ssl unloadable.
+    selected = notice_module().pin_cpython_ssl_binaries(entries, python_prefix=values.prefix)
+    sources = {row[0]: Path(row[1]) for row in selected}
+    assert sources['_ssl.pyd'] == folder / '_ssl.pyd'
+    assert next(row[2] for row in selected if row[0] == '_ssl.pyd') == 'EXTENSION'
+    for name in names:
+        assert sources[name] == folder / name
+        assert sources[name].read_bytes() == ('CPython owns ' + name).encode()
+
+
+def test_missing_cpython_ssl_dependency_stops_packaging(cpython_ssl_files):
+    values, folder, names = cpython_ssl_files
+    (folder / names[0]).unlink()
+    with pytest.raises(ValueError, match='CPython|dependency'):
+        notice_module().pin_cpython_ssl_binaries([], python_prefix=values.prefix)
+
+
+def cpython_tls_stage(values, folder, names):
+    data = json.loads(values.manifest.read_text())
+    data['build_versions'] = {'CPython': '.'.join(map(str, sys.version_info[:3]))}
+    values.manifest.write_text(json.dumps(data))
+    for name in ['_ssl.pyd', *names]:
+        shutil.copyfile(folder / name, values.stage / '_internal' / name)
+
+
+def test_missing_staged_cpython_ssl_dependency_is_rejected(cpython_ssl_files):
+    values, folder, names = cpython_ssl_files
+    cpython_tls_stage(values, folder, names)
+    (values.stage / '_internal' / names[0]).unlink()
+    with pytest.raises(ValueError, match='CPython|TLS|runtime'):
+        collect(notice_module(), values)
+    assert not (values.stage / 'licenses').exists()
+
+
+def test_cpython_ssl_dependency_hashes_are_rechecked_for_publication(cpython_ssl_files):
+    values, folder, names = cpython_ssl_files
+    cpython_tls_stage(values, folder, names)
+    m = notice_module()
+    collect(m, values)
+    (values.stage / '_internal' / names[0]).write_bytes(b'host TLS build')
+    with pytest.raises(ValueError, match='CPython|TLS|runtime|checksum'):
+        m.verify_notices(values.stage)

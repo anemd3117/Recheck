@@ -128,7 +128,8 @@ class GeminiSetup:
             and proof.get('auth_mode') == 'api_key'
         )
 
-    async def connect(self, profile_id, *, role='analysis', cancel=None, on_event=None):
+    async def connect(self, profile_id, *, role='analysis', cancel=None, on_event=None,
+                      force_probe=False):
         self._check_cancel(cancel)
         profile = self.manager.get_profile(profile_id)
         self._gemini_profile(profile)
@@ -159,7 +160,7 @@ class GeminiSetup:
 
         await step('response')
         cached = getattr(self.manager, 'cached_capabilities', lambda pid: None)(profile_id)
-        reused = bool(self._ready(cached, profile))
+        reused = not force_probe and bool(self._ready(cached, profile))
         capabilities = cached if reused else await self.manager.probe_capabilities(
             profile_id, cancel=cancel, on_event=on_event,
         )

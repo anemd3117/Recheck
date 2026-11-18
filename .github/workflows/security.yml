@@ -2,7 +2,7 @@ name: Security analysis
 
 on:
   push:
-    branches: [main, 'audit/**']
+    branches: [main, 'audit/**', experiment/qwebengine-login]
   pull_request:
   schedule:
     - cron: '23 3 * * 1'

@@ -318,6 +318,35 @@ async def test_late_stream_error_does_not_return_previously_assembled_tool_calls
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('event', [
+    {'type': 'error', 'code': 'subscription_sharing_user_not_eligible', 'message': 'private-test-key'},
+    {'type': 'error', 'error': {'code': 'subscription_sharing_user_not_eligible', 'message': 'private-test-key'}},
+    {'type': 'response.failed', 'response': {
+        'error': {'code': 'subscription_sharing_user_not_eligible', 'message': 'private-test-key'},
+    }},
+])
+async def test_structured_stream_plan_ineligibility_is_terminal_and_redacted(event):
+    calls = []
+
+    def handler(outgoing):
+        calls.append(outgoing)
+        return httpx.Response(200, content=sse([event]), headers={'content-type': 'text/event-stream'})
+
+    selected = profile()
+    p = provider_class()(selected, credential_getter=credentials, transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(ProviderError) as caught:
+            await p.chat(request(stream=True))
+    finally:
+        await p.close()
+    assert caught.value.code == 'subscription_sharing_user_not_eligible'
+    assert len(calls) == 1
+    assert p.profile == selected
+    assert 'private-test-key' not in str(caught.value)
+    assert 'private-test-key' not in json.dumps(caught.value.details)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'mutation,expected', [('length', 'length'), ('refusal', 'refusal'), ('empty', 'empty')]
 )

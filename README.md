@@ -1,12 +1,16 @@
 # Recheck
 
-**0.1.5 · Windows x64 초기 개발 버전**
+**0.1.6 · Windows x64 미리보기**
+
+분석 AI 안내는 추천 ChatGPT → Gemini 무료(API) → 공통 AI 계정 연결 순서입니다. 로그인·키 발급은 외부 브라우저가 기본이며, 체크박스로 내장 표시도 선택할 수 있습니다. [Google 제한과 기본값 결정의 근거](https://github.com/leekmny/Recheck/blob/main/docs/decisions/0006-external-browser-default.md)를 참고하세요.
 
 **캡스톤 디자인 주제: 프로그램 동작 비교 및 AI 근거 분석 도구 Recheck**
 
 캡스톤 디자인 프로젝트로 개발한 프로그램 비교 도구입니다. 소스·테스트·직접 만든 샘플·설계 및 검증 범위를 공개합니다. 원본 코드의 권리는 [LICENSE](LICENSE), 외부 구성요소의 조건은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요. 공개 저장소의 열람과 오픈소스 재사용 허용은 별개입니다.
 
-**[0.1.5 Windows 배포 ZIP](https://github.com/leekmny/Recheck/releases/download/v0.1.5/Recheck-0.1.5-Windows-x64.zip)** · [릴리즈 설명](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)
+**[Windows 실행 ZIP·릴리스 목록](https://github.com/leekmny/Recheck/releases)** · [이전 0.1.5 배포 기록](https://github.com/leekmny/Recheck/releases/tag/v0.1.5)
+
+0.1.6에서는 ChatGPT 로그인과 Gemini·OpenAI·Grok·DeepSeek·Claude 키 발급 안내를 통합하고, 연결된 AI의 상태 확인·연결 해제와 비교별 AI 선택을 정리했습니다. **설정 → 분석 AI 연결**에서 연결을 준비하고, **프로그램 비교**에서 이번 분석에 쓸 AI 하나를 고릅니다. 여러 AI에 같은 분석을 자동 요청하지 않습니다. 이전 0.1.5 EXE에는 새 통합 화면이 없습니다. 새 ZIP의 최종 실행 검증·게시 결과는 해당 릴리스와 [작업 기록](https://github.com/leekmny/Recheck/blob/main/docs/decisions/2026-11-17-embedded-login-work-log.md)에서 확인하세요. [연결 사용법과 제한](docs/AI_CONNECTIONS.md), [실제 계정 검증 상태](docs/AI_AUTH_STATUS.md)도 구분해 안내합니다.
 
 `0.1.x`는 초기 개발 버전입니다. [이전 이름 대응표](docs/PUBLIC_HISTORY.md#공개-버전-이름-정리)에 공개 버전의 변경을 기록합니다. 소스 검사와 각 Windows 배포본의 실행 검증 범위는 해당 릴리스에서 구분해 확인하세요.
 
@@ -26,7 +30,7 @@ Recheck는 기존 프로그램과 새로 만든 프로그램에 같은 입력을
 - 불일치·미측정 입력 보관과 새 기록으로 재검사, 실패 항목만 HTML/JSON 내보내기
 - ZIP·ZIP 기반 패키지의 구성 파일 추가·삭제·변경 비교와 JSON/HTML 내보내기
 - 함수·실행 근거 조회, AI 설명·추가 분석, 보고서와 지난 분석 확인
-- 새 사용자는 Gemini 무료 API로 시작하고, 추천 AI인 GPT도 선택 가능
+- 추천 ChatGPT 로그인·Gemini 무료 API·다른 AI 제공자의 연결 안내
 - 도구 설치·관리: PATH 밖의 설치 위치 확인, 필요한 도구의 WinGet 설치와 공식 다운로드 안내
 - Ollama, OpenAI API, Claude API, Gemini, OpenAI 호환 서버의 연결 설정
 - 배포 환경 자동 가져오기: Java·Ghidra·REA 정적 분석과 프로그램 실행을 별도 컨테이너로 분리
@@ -40,7 +44,7 @@ Windows 배포 ZIP을 풀고 **Recheck 폴더 전체를 유지한 채 `Recheck.e
 
 1. **프로그램 비교**에서 정적분석·동적분석·둘 다 분석을 고르고 기존 프로그램과 새 프로그램을 선택합니다. 필요한 도구 확인과 설치 안내를 같은 화면에서 이용할 수 있습니다.
 2. **도구 설치·관리 → 도구 확인**에서 선택한 분석에 필요한 도구를 준비합니다. 내장 환경으로 정적분석하거나 동적분석하려면 Docker Desktop을 실행한 뒤 **분석 도구 내려받아 준비**를 누릅니다. 최초 준비에는 인터넷과 수 GB의 디스크 공간이 필요하며 Java·Ghidra·REA도 이 환경에 포함됩니다. 직접 설치한 Ghidra·Java로 지원되는 형식을 정적분석하거나 ZIP·패키지 구성을 비교할 때는 Docker가 필요하지 않습니다. .NET 등 분석 경로별 지원 범위는 [분석 모드 안내](docs/ANALYSIS_MODES.md)를 확인하세요. 설치·이미지 준비는 해당 버튼을 눌렀을 때만 시작합니다.
-3. **AI 설명을 사용할 때만** AI를 연결합니다. **시작하기 → Gemini 무료로 시작하기**에서 자신의 API 키를 발급·저장하고 실제 응답을 확인하세요. 새 설치의 기본 연결은 Gemini 3.5 Flash-Lite이며, 연결 전에는 활성화되지 않습니다. 기존 사용자의 AI 선택·키·예산은 유지합니다. GPT는 추천 선택으로 제공하며 ChatGPT 로그인으로 연결합니다. [Gemini 무료 연결 안내](docs/GEMINI_FREE_SETUP.md)를 참고하세요.
+3. **AI 설명을 사용할 때만** AI를 연결합니다. 추천 ChatGPT 로그인 또는 **Gemini 무료로 시작하기**에서 자신의 계정·키로 연결하고 실제 응답을 확인하세요. Gemini 무료 시작의 기본 모델은 Gemini 3.5 Flash-Lite이며, 연결 전에는 활성화되지 않습니다. **프로그램 비교**에서 준비된 AI 연결과 모델 하나를 선택합니다. 기존 연결·키·예산은 유지하며 실행 중에는 이번 선택을 고정합니다. [AI 연결 안내](docs/AI_CONNECTIONS.md), [Gemini 무료 연결 안내](docs/GEMINI_FREE_SETUP.md)를 참고하세요.
 4. 동적분석이 포함된 경우 비교할 입력을 등록하고 **비교 시작하기**를 누릅니다. 정적분석만 선택하면 실행 입력이 숨겨집니다. 도구 또는 파일 지원 조건이 맞지 않으면 안내를 확인하고 준비하거나 분석 모드를 직접 바꾸세요.
 5. 실제 출력·종료 코드·불일치 입력을 먼저 확인한 뒤 AI 설명과 보고서를 살펴봅니다.
 
@@ -99,8 +103,10 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 ## GitHub에서 이어서 개발하기
 
-소스와 선별 문서는 열람할 수 있으며 수정 권한은 관리자와 초대한 Collaborator에게만 부여합니다. 변경은 브랜치·PR·검사를 거칩니다. 실제 분석 원본·인증 정보·개인 QA·VM·모델은 각 PC에 남깁니다. 문제 제보에는 [보안 안내](SECURITY.md)를 따르세요. 실행 파일은 검사한 버전별 릴리즈 ZIP으로 제공합니다.
+소스와 선별 문서는 열람할 수 있으며 수정 권한은 관리자와 초대한 Collaborator에게만 부여합니다. 변경은 브랜치·PR·검사를 거칩니다. 실제 분석 원본·인증 정보·개인 QA·VM·모델은 각 PC에 남깁니다. 문제 제보에는 [보안 안내](https://github.com/leekmny/Recheck/blob/main/SECURITY.md)를 따르세요. 실행 파일은 검사한 버전별 릴리즈 ZIP으로 제공합니다.
 
 자세한 협업·검사·배포 절차는 [GitHub 작업 안내](docs/GITHUB_WORKFLOW.md)를 참고하세요. 중단 지점, REA 기능별 구현 범위와 남은 일은 [프로젝트 상태](docs/PROJECT_STATUS.md)에 정리했습니다.
+
+팀원은 [기여·개발 기록 안내](https://github.com/leekmny/Recheck/blob/main/CONTRIBUTING.md)부터 읽고 작업 브랜치와 PR을 준비하세요. 중요한 선택과 채택·보류한 대안은 [설계 결정 기록(ADR)](https://github.com/leekmny/Recheck/blob/main/docs/decisions/README.md)에 남깁니다. [초기 내장 로그인 실험](https://github.com/leekmny/Recheck/blob/main/experiments/embedded_login/README.md)은 통합 전 관찰 기록이며, 현재 제품 통합은 [연결 설계](https://github.com/leekmny/Recheck/blob/main/docs/superpowers/specs/2026-11-17-embedded-provider-connections-design.md)를 따릅니다.
 
 실행 ZIP은 **Releases**에서 제공합니다. **Packages**는 Docker 이미지·개발용 의존성을 위한 별도 레지스트리이며 현재 사용하지 않습니다. `No packages published`는 실행 ZIP이 없다는 뜻이 아닙니다.
